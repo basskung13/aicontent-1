@@ -969,6 +969,29 @@ exports.scheduleJobs = functions.pubsub.schedule('every 1 minutes')
                   let prompts = []; // Final prompts to use (English)
                   let scenes = []; // Complete scene objects
                   let modeMetadata = {};
+                  let episodeData = null; // Episode from Content Queue
+                  
+                  // === CONTENT QUEUE INTEGRATION ===
+                  // Fetch next pending episode from queue
+                  const episodesRef = project.ref.collection('episodes')
+                    .where('status', '==', 'pending')
+                    .orderBy('order', 'asc')
+                    .limit(1);
+                  const episodesSnap = await episodesRef.get();
+                  
+                  if (!episodesSnap.empty) {
+                    const episodeDoc = episodesSnap.docs[0];
+                    episodeData = { id: episodeDoc.id, ...episodeDoc.data() };
+                    console.log(`      📺 Episode from Queue: "${episodeData.title}"`);
+                    
+                    // Mark episode as processing
+                    await episodeDoc.ref.update({ 
+                      status: 'processing',
+                      processingStartedAt: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                  } else {
+                    console.log(`      ⚠️ No pending episodes in queue, using Mode defaults`);
+                  }
                   
                   const modeId = project.data.executionModeId;
                   if (modeId) {
@@ -1026,7 +1049,7 @@ exports.scheduleJobs = functions.pubsub.schedule('every 1 minutes')
                     }
                   }
                   
-                  // === EXPANDER INTEGRATION ===
+                  // === EXPANDER INTEGRATION (with Episode Context) ===
                   // Check if project has an Expander selected
                   const expanderId = project.data.expanderId;
                   if (expanderId && prompts.length > 0) {
@@ -1042,25 +1065,43 @@ exports.scheduleJobs = functions.pubsub.schedule('every 1 minutes')
                           console.log(`      🔧 Expanding ${prompts.length} prompts with ${blocks.length} blocks...`);
                           
                           const openai = getOpenAI();
-                          const blockInstructions = blocks.map((b, i) => `${i + 1}. ${b.name}: ${b.instruction}`).join('\n');
+                          const blockInstructions = blocks.map((b, i) => `${i + 1}. ${b.name}: ${b.instruction || b.description || ''}`).join('\n');
+                          
+                          // Build episode context for AI
+                          const episodeContext = episodeData 
+                            ? `\n\n=== EPISODE TOPIC (MUST be the main subject) ===\nTitle: "${episodeData.title}"\nDescription: ${episodeData.description || 'N/A'}\n\nIMPORTANT: The video MUST be about "${episodeData.title}". Adapt the scene to focus on this topic.`
+                            : '';
+                          
+                          // Build character context
+                          const characterContext = modeMetadata.characters && modeMetadata.characters.length > 0
+                            ? `\n\n=== CHARACTERS ===\n${modeMetadata.characters.map(c => `- ${c.name}: ${c.visualDescription || c.description || 'N/A'}`).join('\n')}`
+                            : '';
                           
                           const expandedPrompts = [];
-                          for (const prompt of prompts) {
+                          for (let i = 0; i < prompts.length; i++) {
+                            const prompt = prompts[i];
                             const response = await openai.chat.completions.create({
                               model: 'gpt-4o',
                               messages: [
                                 {
                                   role: 'system',
-                                  content: `You are a Premium Prompt Expander for AI video generation.
-Expand the user's simple prompt using these rules:
-${blockInstructions}
+                                  content: `You are a Premium Prompt Expander for AI video generation (Google Flow / Veo).
 
-Output ONLY the expanded prompt in English. No explanations.`
+=== EXPANDER RULES ===
+${blockInstructions}
+${episodeContext}
+${characterContext}
+
+=== OUTPUT REQUIREMENTS ===
+1. Write a DETAILED 8-second video scene prompt in English (150-300 words)
+2. Include: character appearances, lighting, camera angles, ambient sounds, emotions
+3. Be cinematic and immersive
+4. Output ONLY the expanded prompt, no explanations`
                                 },
-                                { role: 'user', content: prompt }
+                                { role: 'user', content: `Scene ${i + 1}: ${prompt}` }
                               ],
                               temperature: 0.7,
-                              max_tokens: 500
+                              max_tokens: 800
                             });
                             
                             const expanded = response.choices[0]?.message?.content?.trim() || prompt;
@@ -1087,6 +1128,8 @@ Output ONLY the expanded prompt in English. No explanations.`
                     modeMetadata: modeMetadata, // Mode-level info
                     scenes: scenes, // Complete scene objects
                     prompts: prompts, // Simple prompts for backward compatibility
+                    episodeId: episodeData?.id || null, // Link to episode
+                    episodeTitle: episodeData?.title || null,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     scheduledTime: slot.start
                   });
@@ -1535,6 +1578,315 @@ Return ONLY the expanded prompt, no explanations.`;
       return result;
     } catch (error) {
       console.error('Error expanding episode:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+// ============================================
+// TEST PROMPT PIPELINE
+// ============================================
+
+// Function: Test full prompt pipeline (Mode + Expander → Full Prompts + Titles + Tags)
+exports.testPromptPipeline = functions
+  .runWith({ secrets: ['OPENAI_API_KEY'], timeoutSeconds: 120, memory: '1GB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const userId = context.auth.uid;
+    const { projectId, sceneDuration: inputSceneDuration } = data;
+
+    if (!projectId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing projectId');
+    }
+
+    try {
+      const db = admin.firestore();
+      const openai = getOpenAI();
+
+      // 1. Get Project
+      const projectDoc = await db
+        .collection('users').doc(userId)
+        .collection('projects').doc(projectId)
+        .get();
+
+      if (!projectDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Project not found');
+      }
+      const project = projectDoc.data();
+
+      // 1.5. Get sceneDuration from slots or use input/default
+      let sceneDuration = inputSceneDuration || 8; // default 8 seconds
+      const slotsSnap = await db
+        .collection('users').doc(userId)
+        .collection('projects').doc(projectId)
+        .collection('slots').limit(1).get();
+      
+      if (!slotsSnap.empty) {
+        const slotData = slotsSnap.docs[0].data();
+        sceneDuration = slotData.sceneDuration || sceneDuration;
+      }
+      console.log(`📏 Scene Duration: ${sceneDuration} seconds`);
+
+      // 2. Get Mode
+      const modeId = project.executionModeId;
+      if (!modeId) {
+        throw new functions.https.HttpsError('failed-precondition', 'No Mode selected for this project');
+      }
+
+      const modeDoc = await db
+        .collection('users').doc(userId)
+        .collection('modes').doc(modeId)
+        .get();
+
+      if (!modeDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Mode not found');
+      }
+      const modeData = modeDoc.data();
+
+      // 3. Get Expander (optional)
+      let expanderBlocks = [];
+      const expanderId = project.expanderId;
+      if (expanderId) {
+        const expanderDoc = await db
+          .collection('users').doc(userId)
+          .collection('expanders').doc(expanderId)
+          .get();
+        
+        if (expanderDoc.exists) {
+          const expanderData = expanderDoc.data();
+          expanderBlocks = expanderData.blocks || [];
+        }
+      }
+
+      // 3.5. Get Episode from Content Queue (for topic context)
+      let episodeData = null;
+      const episodesSnap = await db
+        .collection('users').doc(userId)
+        .collection('projects').doc(projectId)
+        .collection('episodes')
+        .where('status', '==', 'pending')
+        .orderBy('order', 'asc')
+        .limit(1)
+        .get();
+      
+      if (!episodesSnap.empty) {
+        const episodeDoc = episodesSnap.docs[0];
+        episodeData = { id: episodeDoc.id, ...episodeDoc.data() };
+        console.log(`📺 Episode Topic: "${episodeData.title}"`);
+      } else {
+        console.log(`⚠️ No pending episodes, using Mode name as topic`);
+      }
+
+      // 4. Extract Scenes from Mode
+      const rawScenes = [];
+      const characters = modeData.characters || [];
+      const locations = modeData.locations || [];
+
+      (modeData.blocks || []).forEach((block, blockIndex) => {
+        (block.evolution || []).forEach((step, stepIndex) => {
+          const dialogues = (step.dialogues || []).map(d => {
+            const char = characters.find(c => c.id === d.characterId);
+            return {
+              character: char?.name || 'Unknown',
+              text: d.text || ''
+            };
+          });
+
+          rawScenes.push({
+            sceneNumber: rawScenes.length + 1,
+            blockTitle: block.title || `Scene ${blockIndex + 1}`,
+            visualPrompt: step.rawPrompt || block.title || '',
+            audioAmbience: step.audioInstruction || '',
+            cameraAngle: step.cameraAngle || 'wide',
+            timeOfDay: step.timeOfDay || 'day',
+            dialogues: dialogues
+          });
+        });
+      });
+
+      if (rawScenes.length === 0) {
+        throw new functions.https.HttpsError('failed-precondition', 'Mode has no scenes. Add evolution steps to blocks.');
+      }
+
+      // 5. Build Expander Instructions
+      const blockInstructions = expanderBlocks.length > 0 
+        ? expanderBlocks.map((b, i) => `${i + 1}. ${b.name}: ${b.instruction || b.description || ''}`).join('\n')
+        : 'Standard cinematic style with clear visuals';
+
+      // 6. Generate Full Prompts using AI
+      const characterDescriptions = characters.map(c => 
+        `- ${c.name}: ${c.visualDescription || c.description || 'Not specified'}`
+      ).join('\n') || 'No characters defined';
+
+      const sceneInputs = rawScenes.map((s, i) => 
+        `Scene ${i + 1}: ${s.visualPrompt}${s.dialogues.length > 0 ? ` [Dialogue: ${s.dialogues.map(d => d.character + ': ' + d.text).join('; ')}]` : ''}`
+      ).join('\n');
+
+      // Build Episode context for AI
+      const episodeTopic = episodeData?.title || modeData.name || 'Untitled Video';
+      const episodeDesc = episodeData?.description || modeData.description || '';
+
+      const promptGenerationRequest = `You are a PREMIUM AI video prompt engineer for Google Flow / Veo.
+
+=== 🎯 MAIN TOPIC (CRITICAL - ALL content MUST be about this) ===
+Topic: "${episodeTopic}"
+Description: ${episodeDesc}
+
+⚠️ IMPORTANT: The ENTIRE video, ALL prompts, ALL titles, and ALL tags MUST be directly related to "${episodeTopic}". 
+DO NOT generate content about unrelated subjects. Stay focused on the topic.
+
+=== EXPANDER RULES (Visual style guidelines) ===
+${blockInstructions}
+
+=== CHARACTERS ===
+${characterDescriptions}
+
+=== MODE TEMPLATE ===
+Category: ${modeData.category || 'Cinematic'}
+System Instruction: ${modeData.systemInstruction || ''}
+
+=== SCENE STRUCTURE TO FOLLOW ===
+${sceneInputs}
+
+=== SCENE DURATION ===
+Each scene is exactly ${sceneDuration} SECONDS of video. Write prompts appropriate for this duration.
+
+=== OUTPUT REQUIREMENTS ===
+1. Each "englishPrompt" MUST be about "${episodeTopic}" - adapt the scene structure to fit this topic
+2. Include in EVERY prompt:
+   - Visual details related to "${episodeTopic}"
+   - Character appearance (if applicable)
+   - Lighting and atmosphere
+   - Camera angle/movement
+   - Ambient sounds
+3. Apply Expander rules for visual STYLE only (not content)
+4. Make scenes flow naturally as a cohesive story about "${episodeTopic}"
+
+=== OUTPUT FORMAT (JSON) ===
+{
+  "prompts": [
+    {
+      "sceneNumber": 1,
+      "englishPrompt": "Detailed ${sceneDuration}-second scene description for AI video generation",
+      "audioDescription": "Sound design: ambient sounds, music mood"
+    }
+  ],
+  "titles": {
+    "tiktok": "Catchy TikTok title in Thai (max 100 chars)",
+    "facebook": "Engaging Facebook title in Thai (max 150 chars)",
+    "instagram": "Instagram caption in Thai (max 100 chars)",
+    "youtube": "SEO-friendly YouTube title in Thai (max 100 chars)"
+  },
+  "tags": {
+    "tiktok": ["relevant", "trending", "thai", "viral", "fyp"],
+    "facebook": ["relevant", "engaging", "share"],
+    "instagram": ["30 relevant hashtags for maximum reach"],
+    "youtube": ["10 SEO optimized tags"]
+  }
+}
+
+CRITICAL RULES:
+- Generate EXACTLY ${rawScenes.length} prompts (one per scene)
+- Each scene = ${sceneDuration} seconds of video
+- ALL content MUST be about "${episodeTopic}" - this is the video topic
+- Titles MUST be in Thai and relate to "${episodeTopic}"
+- Tags MUST be relevant to "${episodeTopic}" (WITHOUT # symbol)
+- TikTok: 5 tags, Facebook: 3 tags, Instagram: 30 tags, YouTube: 10 tags
+- Output valid JSON only, no markdown`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: `You are a video prompt engineer. The video topic is "${episodeTopic}". ALL prompts, titles, and tags MUST be about this topic. Each scene is ${sceneDuration} seconds. Output valid JSON only.` },
+          { role: 'user', content: promptGenerationRequest }
+        ],
+        temperature: 0.7
+      });
+
+      let content = response.choices[0].message.content.trim();
+      content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      let result;
+      try {
+        result = JSON.parse(content);
+      } catch (parseErr) {
+        console.error('Failed to parse AI response:', parseErr);
+        // Fallback: generate basic prompts
+        result = {
+          prompts: rawScenes.map((s, i) => ({
+            sceneNumber: i + 1,
+            englishPrompt: s.visualPrompt || `Scene ${i + 1}`,
+            audioDescription: s.audioAmbience || 'Ambient sounds'
+          })),
+          titles: {
+            tiktok: modeData.name || 'Video',
+            facebook: modeData.name || 'Video',
+            instagram: modeData.name || 'Video',
+            youtube: modeData.name || 'Video'
+          },
+          tags: {
+            tiktok: ['video', 'content', 'viral', 'fyp', 'trending'],
+            facebook: ['video', 'content', 'watch'],
+            instagram: Array(30).fill('content'),
+            youtube: Array(10).fill('video')
+          }
+        };
+      }
+
+      // 7. Save Test Result to Project
+      const testResult = {
+        ...result,
+        testedAt: admin.firestore.FieldValue.serverTimestamp(),
+        modeId: modeId,
+        modeName: modeData.name || 'Unknown',
+        expanderId: expanderId || null,
+        sceneCount: rawScenes.length
+      };
+
+      await db
+        .collection('users').doc(userId)
+        .collection('projects').doc(projectId)
+        .update({
+          lastPromptTest: testResult
+        });
+
+      // 8. Log the test with detailed info
+      await db
+        .collection('users').doc(userId)
+        .collection('projects').doc(projectId)
+        .collection('logs').add({
+          message: `✅ Prompt Test: "${episodeTopic}" - Generated ${result.prompts?.length || 0} prompts`,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          platform: 'SYSTEM',
+          type: 'test',
+          sceneCount: rawScenes.length,
+          sceneDuration: sceneDuration,
+          totalLength: rawScenes.length * sceneDuration,
+          topic: episodeTopic,
+          modeId: modeId,
+          modeName: modeData.name || 'Unknown'
+        });
+
+      console.log(`✅ Test Pipeline completed: ${result.prompts?.length || 0} prompts for project ${projectId}`);
+
+      return {
+        success: true,
+        ...result,
+        modeInfo: {
+          id: modeId,
+          name: modeData.name,
+          sceneCount: rawScenes.length
+        },
+        expanderInfo: expanderId ? {
+          id: expanderId,
+          blockCount: expanderBlocks.length
+        } : null
+      };
+
+    } catch (error) {
+      console.error('Test Pipeline Error:', error);
       throw new functions.https.HttpsError('internal', error.message);
     }
   });

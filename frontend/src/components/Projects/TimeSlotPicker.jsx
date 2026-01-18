@@ -150,6 +150,7 @@ export default function TimeSlotPicker({ projectId, modeScenes = null }) {
     const [newSlot, setNewSlot] = useState({
         start: '09:00',
         scenes: modeScenes || 1,
+        sceneDuration: 8, // seconds per scene
         platforms: []
     });
 
@@ -282,6 +283,7 @@ export default function TimeSlotPicker({ projectId, modeScenes = null }) {
         setNewSlot({
             start: slot.start,
             scenes: slot.scenes,
+            sceneDuration: slot.sceneDuration || 8,
             platforms: slot.platforms || [] // Ensure array
         });
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -292,6 +294,7 @@ export default function TimeSlotPicker({ projectId, modeScenes = null }) {
         setNewSlot({
             start: '09:00',
             scenes: 1,
+            sceneDuration: 8,
             platforms: []
         });
         setError(null);
@@ -373,6 +376,7 @@ export default function TimeSlotPicker({ projectId, modeScenes = null }) {
             start: newSlot.start,
             end: endTime,
             scenes: newSlot.scenes,
+            sceneDuration: newSlot.sceneDuration, // seconds per scene for AI
             platformsCount: newSlot.platforms.length,
             // STORE FULL ACCOUNT OBJECTS NOW
             platforms: newSlot.platforms,
@@ -456,45 +460,94 @@ export default function TimeSlotPicker({ projectId, modeScenes = null }) {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                {/* Row 1: Time + Scenes + วินาที/ซีน (ชิดซ้าย) + Add Button (ชิดขวา) */}
+                <div className="flex flex-wrap items-end gap-4 mb-4">
+                    {/* LEFT GROUP: Time + Scenes + วินาที/ซีน */}
+                    <div className="flex items-end gap-4">
+                        {/* 1. Time Input */}
+                        <div className="flex-shrink-0">
+                            <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">{t('timeslot.start_time')}</label>
+                            <input
+                                type="time"
+                                value={newSlot.start}
+                                onChange={e => setNewSlot({ ...newSlot, start: e.target.value })}
+                                className="w-32 h-12 bg-white/5 border border-white/10 rounded-xl px-3 text-lg text-white placeholder-white/20 focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50 outline-none transition-all"
+                            />
+                        </div>
 
-                    {/* 1. Time Input */}
-                    <div className="md:col-span-2">
-                        <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">{t('timeslot.start_time')}</label>
-                        <input
-                            type="time"
-                            value={newSlot.start}
-                            onChange={e => setNewSlot({ ...newSlot, start: e.target.value })}
-                            className="w-full h-14 bg-white/5 border border-white/10 rounded-xl px-4 text-xl text-white placeholder-white/20 focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50 outline-none transition-all"
-                        />
+                        {/* 2. Scenes Input */}
+                        <div className="flex-shrink-0">
+                            <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">
+                                Scenes {modeScenes ? <span className="text-purple-400">(Mode)</span> : ''}
+                            </label>
+                            <input
+                                type="number"
+                                min="1" max="20"
+                                value={modeScenes || newSlot.scenes}
+                                onChange={e => !modeScenes && setNewSlot({ ...newSlot, scenes: Number(e.target.value) })}
+                                readOnly={!!modeScenes}
+                                className={twMerge(
+                                    "w-20 h-12 border rounded-xl px-3 text-lg text-white text-center placeholder-white/20 outline-none transition-all",
+                                    modeScenes 
+                                        ? "bg-purple-500/10 border-purple-500/30 cursor-not-allowed" 
+                                        : "bg-white/5 border-white/10 focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
+                                )}
+                            />
+                        </div>
+
+                        {/* 3. Scene Duration */}
+                        <div className="flex-shrink-0">
+                            <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">
+                                วินาที/ซีน
+                            </label>
+                            <input
+                                type="number"
+                                min="5" max="60"
+                                value={newSlot.sceneDuration}
+                                onChange={e => setNewSlot({ ...newSlot, sceneDuration: Number(e.target.value) })}
+                                className="w-20 h-12 bg-purple-500/10 border border-purple-500/30 rounded-xl px-3 text-lg text-white text-center placeholder-white/20 focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 outline-none transition-all"
+                                placeholder="8"
+                            />
+                        </div>
                     </div>
 
-                    {/* 2. Scenes Input - LOCKED if modeScenes is provided */}
-                    <div className="md:col-span-2">
-                        <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">
-                            Scenes {modeScenes ? <span className="text-purple-400">(จาก Mode)</span> : '(1-20)'}
-                        </label>
-                        <input
-                            type="number"
-                            min="1" max="20"
-                            value={modeScenes || newSlot.scenes}
-                            onChange={e => !modeScenes && setNewSlot({ ...newSlot, scenes: Number(e.target.value) })}
-                            readOnly={!!modeScenes}
+                    {/* Spacer to push button right */}
+                    <div className="flex-grow"></div>
+
+                    {/* RIGHT: Add/Update Button */}
+                    <div className="flex gap-2 flex-shrink-0">
+                        {editingSlotId && (
+                            <button
+                                onClick={handleCancelEdit}
+                                className="h-12 px-4 bg-white/10 hover:bg-white/20 text-gray-300 rounded-xl transition-all"
+                                title="Cancel Edit"
+                            >
+                                <X size={20} />
+                            </button>
+                        )}
+                        <button
+                            onClick={handleSaveSlot}
+                            disabled={isSaving || !currentUser}
                             className={twMerge(
-                                "w-full h-14 border rounded-xl px-4 text-xl text-white placeholder-white/20 outline-none transition-all",
-                                modeScenes 
-                                    ? "bg-purple-500/10 border-purple-500/30 cursor-not-allowed" 
-                                    : "bg-white/5 border-white/10 focus:ring-2 focus:ring-red-500/50 focus:border-red-500/50"
+                                "h-12 px-6 font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed",
+                                editingSlotId
+                                    ? "bg-blue-600 hover:bg-blue-500 text-white"
+                                    : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white"
                             )}
-                        />
+                        >
+                            {editingSlotId ? <Save size={18} /> : <Plus size={18} />}
+                            {editingSlotId ? "Update" : t('timeslot.add_slot')}
+                        </button>
                     </div>
+                </div>
 
-                    {/* 3. Platforms Grid (Interactive Tiles) - 4 Columns */}
-                    <div className="md:col-span-5">
-                        <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">{t('timeslot.platforms')}</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+                {/* Row 2: Platforms (ชิดซ้าย) + Duration (ชิดขวา) */}
+                <div className="flex items-end justify-between gap-4">
+                    {/* LEFT: Platforms Grid */}
+                    <div className="flex-shrink-0">
+                        <label className="text-xs text-gray-400 mb-2 block uppercase tracking-wider font-semibold">{t('timeslot.platforms')} (1-4)</label>
+                        <div className="flex gap-2">
                             {PLATFORMS_LIST.map(platform => {
-                                // Find if this platform is selected (stored as object now)
                                 const selectedObj = newSlot.platforms.find(p => p.platformId === platform.id);
                                 const isSelected = !!selectedObj;
 
@@ -503,61 +556,31 @@ export default function TimeSlotPicker({ projectId, modeScenes = null }) {
                                         key={platform.id}
                                         onClick={(e) => handlePlatformClick(platform.id, e)}
                                         className={twMerge(
-                                            "h-14 rounded-xl text-sm font-bold transition-all border flex flex-col items-center justify-center relative overflow-hidden",
+                                            "w-24 h-12 rounded-xl text-xs font-bold transition-all border flex flex-col items-center justify-center relative overflow-hidden",
                                             isSelected
                                                 ? "bg-green-500/20 border-green-500 text-white shadow-[0_0_10px_rgba(34,197,94,0.3)]"
                                                 : "bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-white hover:border-white/20"
                                         )}
                                     >
                                         <div className="z-10 flex items-center gap-1">
-                                            {/* Show Account Name if selected, else Platform Label */}
                                             {isSelected ? (
-                                                <span className="truncate max-w-[80%] text-xs">{selectedObj.name}</span>
+                                                <span className="truncate max-w-full text-xs">{selectedObj.name?.split(' ')[0] || platform.label}</span>
                                             ) : (
                                                 platform.label
                                             )}
                                         </div>
-
-                                        {/* Background Selection Indicator */}
-                                        {isSelected && <Check size={16} className="absolute top-1 right-1 text-green-400" />}
+                                        {isSelected && <Check size={12} className="absolute top-0.5 right-0.5 text-green-400" />}
                                     </button>
                                 )
                             })}
                         </div>
                     </div>
 
-                    {/* 4. Add Button & Summary */}
-                    <div className="md:col-span-3 flex flex-col gap-2">
-                        <div className="text-xs text-gray-400 mb-0.5 uppercase tracking-wider font-semibold flex justify-between">
-                            <span>Duration</span>
-                            <span className="text-white">{duration}m</span>
-                        </div>
-                        <div className="flex gap-2">
-                            {editingSlotId && (
-                                <button
-                                    onClick={handleCancelEdit}
-                                    className="h-14 px-4 bg-white/10 hover:bg-white/20 text-gray-300 rounded-xl transition-all"
-                                    title="Cancel Edit"
-                                >
-                                    <X size={20} />
-                                </button>
-                            )}
-                            <button
-                                onClick={handleSaveSlot}
-                                disabled={isSaving || !currentUser}
-                                className={twMerge(
-                                    "w-full h-14 font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed",
-                                    editingSlotId
-                                        ? "bg-blue-600 hover:bg-blue-500 text-white"
-                                        : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white"
-                                )}
-                            >
-                                {editingSlotId ? <Save size={20} /> : <Plus size={20} />}
-                                {editingSlotId ? "Update Slot" : t('timeslot.add_slot')}
-                            </button>
-                        </div>
+                    {/* RIGHT: Duration Display */}
+                    <div className="flex-shrink-0 px-4 h-12 bg-white/5 rounded-xl border border-white/10 flex items-center gap-2">
+                        <span className="text-xs text-gray-400 uppercase">Duration</span>
+                        <span className="text-white font-bold text-lg">{duration}m</span>
                     </div>
-
                 </div>
             </div>
 

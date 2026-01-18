@@ -46,9 +46,9 @@ export default function ProjectHistory({ projectId }) {
                     ...data,
                     rawDate: rawDate,
                     timestamp: rawDate.toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }),
-                    scenes: data.scenes || '-',
-                    videoLength: data.videoLength || '-',
-                    duration: data.duration || '-'
+                    scenes: data.sceneCount || data.scenes || '-',
+                    videoLength: data.totalLength ? `${data.totalLength}s` : (data.videoLength || '-'),
+                    duration: data.sceneDuration ? `${data.sceneDuration}s/scene` : (data.duration || '-')
                 });
             });
             setLogs(loadedLogs);
