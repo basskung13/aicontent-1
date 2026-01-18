@@ -3,6 +3,7 @@ import { db, auth } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, setDoc, increment, getDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { CheckCircle, XCircle, ExternalLink, Clock, Loader2, TrendingUp, TrendingDown, Users, Wallet, CreditCard, ArrowUpRight, ArrowDownRight, Edit3, DollarSign, BarChart3, Building2 } from 'lucide-react';
+import GlassDropdown from '../components/ui/GlassDropdown';
 
 const Admin = () => {
     const [currentUser, setCurrentUser] = useState(null);
@@ -624,24 +625,26 @@ const Admin = () => {
                                     placeholder="🔍 ค้นหา email..."
                                     className="flex-1 min-w-[200px] bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all"
                                 />
-                                <select
+                                <GlassDropdown
                                     value={activityTypeFilter}
-                                    onChange={(e) => setActivityTypeFilter(e.target.value)}
-                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-red-500 cursor-pointer hover:bg-black/60 transition-all"
-                                >
-                                    <option value="all">ทุกประเภท</option>
-                                    <option value="deposit">เติมเงิน</option>
-                                    <option value="withdrawal">ถอนเงิน</option>
-                                </select>
-                                <select
+                                    onChange={setActivityTypeFilter}
+                                    options={[
+                                        { value: 'all', label: 'ทุกประเภท' },
+                                        { value: 'deposit', label: 'เติมเงิน' },
+                                        { value: 'withdrawal', label: 'ถอนเงิน' }
+                                    ]}
+                                    buttonClassName="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-red-500 cursor-pointer hover:bg-black/60 transition-all"
+                                />
+                                <GlassDropdown
                                     value={activityApproverFilter}
-                                    onChange={(e) => setActivityApproverFilter(e.target.value)}
-                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-red-500 cursor-pointer hover:bg-black/60 transition-all"
-                                >
-                                    <option value="all">ผู้อนุมัติทั้งหมด</option>
-                                    <option value="admin">Admin</option>
-                                    <option value="other">อื่นๆ</option>
-                                </select>
+                                    onChange={setActivityApproverFilter}
+                                    options={[
+                                        { value: 'all', label: 'ผู้อนุมัติทั้งหมด' },
+                                        { value: 'admin', label: 'Admin' },
+                                        { value: 'other', label: 'อื่นๆ' }
+                                    ]}
+                                    buttonClassName="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-red-500 cursor-pointer hover:bg-black/60 transition-all"
+                                />
                             </div>
 
                             <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">

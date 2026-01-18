@@ -9,6 +9,7 @@ import { collection, doc, setDoc, onSnapshot, query, orderBy, serverTimestamp, u
 import { onAuthStateChanged } from 'firebase/auth';
 import { twMerge } from 'tailwind-merge';
 import TimeSlotPicker from '../components/Projects/TimeSlotPicker';
+import GlassDropdown from '../components/ui/GlassDropdown';
 
 import ProjectHistory from '../components/Projects/ProjectHistory';
 import ContentQueue from '../components/Projects/ContentQueue';
@@ -708,7 +709,7 @@ export default function Projects() {
                                 {isTimezoneDropdownOpen && createPortal(
                                     <div
                                         ref={timezoneDropdownRef}
-                                        className="fixed bg-slate-900/90 backdrop-blur-3xl border border-white/20 rounded-2xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] z-[999999] overflow-hidden"
+                                        className="fixed bg-slate-900/80 backdrop-blur-[28px] border border-white/15 rounded-2xl shadow-[0_32px_100px_rgba(0,0,0,0.95)] ring-1 ring-white/10 z-[999999] overflow-hidden"
                                         style={{
                                             top: timezoneDropdownPos.top,
                                             left: timezoneDropdownPos.left,
@@ -1088,10 +1089,9 @@ export default function Projects() {
                                                         <Layers size={14} /> Select Execution Mode
                                                     </label>
                                                     <div className="glass-dropdown-wrapper w-full">
-                                                        <select
+                                                        <GlassDropdown
                                                             value={selectedModeId}
-                                                            onChange={async (e) => {
-                                                                const newModeId = e.target.value;
+                                                            onChange={async (newModeId) => {
                                                                 setSelectedModeId(newModeId);
 
                                                                 // OPTIMISTIC UPDATE: Update Firestore Immediately
@@ -1111,13 +1111,14 @@ export default function Projects() {
                                                                     }
                                                                 }
                                                             }}
-                                                            className="glass-dropdown w-full"
-                                                        >
-                                                            {modes.length === 0 && <option value="" className="bg-slate-900 text-white">No modes found</option>}
-                                                            {modes.map(m => (
-                                                                <option key={m.id} value={m.id} className="bg-slate-900 text-white">{m.name}</option>
-                                                            ))}
-                                                        </select>
+                                                            options={
+                                                                modes.length > 0
+                                                                    ? modes.map(m => ({ value: m.id, label: m.name }))
+                                                                    : [{ value: '', label: 'No modes found', disabled: true }]
+                                                            }
+                                                            disabled={modes.length === 0}
+                                                            buttonClassName="glass-dropdown w-full"
+                                                        />
                                                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" size={16} />
                                                     </div>
                                                 </div>
@@ -1189,34 +1190,30 @@ export default function Projects() {
                                                         <Sparkles size={14} /> Select Expander
                                                     </label>
                                                     <div className="glass-dropdown-wrapper w-full">
-                                                        <select
+                                                        <GlassDropdown
                                                             value={selectedExpanderId}
-                                                            onChange={async (e) => {
-                                                                const newExpanderId = e.target.value;
+                                                            onChange={async (newExpanderId) => {
                                                                 setSelectedExpanderId(newExpanderId);
 
-                                                                // Save to Firestore
-                                                                if (selectedProject && currentUser) {
+                                                                if (selectedProject) {
                                                                     try {
-                                                                        const projectRef = doc(db, 'users', currentUser.uid, 'projects', selectedProject.id);
                                                                         const expanderObj = expanders.find(ex => ex.id === newExpanderId);
+                                                                        const projectRef = doc(db, 'users', currentUser.uid, 'projects', selectedProject.id);
                                                                         await updateDoc(projectRef, {
-                                                                            expanderId: newExpanderId,
-                                                                            expanderName: expanderObj?.name || ''
+                                                                            expanderId: newExpanderId || null,
+                                                                            expanderName: expanderObj?.name || null
                                                                         });
-                                                                        console.log("Expander set to:", expanderObj?.name);
                                                                     } catch (err) {
                                                                         console.error("Error updating expander:", err);
                                                                     }
                                                                 }
                                                             }}
-                                                            className="glass-dropdown w-full"
-                                                        >
-                                                            <option value="" className="bg-slate-900 text-white">ไม่ใช้ Expander</option>
-                                                            {expanders.map(ex => (
-                                                                <option key={ex.id} value={ex.id} className="bg-slate-900 text-white">{ex.name}</option>
-                                                            ))}
-                                                        </select>
+                                                            options={[
+                                                                { value: '', label: 'ไม่ใช้ Expander' },
+                                                                ...expanders.map(ex => ({ value: ex.id, label: ex.name }))
+                                                            ]}
+                                                            buttonClassName="glass-dropdown w-full"
+                                                        />
                                                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" size={16} />
                                                     </div>
                                                 </div>

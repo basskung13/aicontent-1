@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Users, Plus, Edit2, Trash2, X, Save, Upload, ArrowLeft, Loader2, Image, Star, Skull, UserCircle, Filter, PlusCircle, MinusCircle, Search, Copy, Pin, SortAsc, Eye, Tag, Heart, ChevronDown } from 'lucide-react';
+import GlassDropdown from '../components/ui/GlassDropdown';
 import { auth, db, storage } from '../firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -58,6 +59,8 @@ const Characters = () => {
   const [roleFilter, setRoleFilter] = useState('all'); // 'all' | 'main' | 'villain' | 'supporting'
   const [customOptions, setCustomOptions] = useState({});
   const [newOptionInput, setNewOptionInput] = useState({});
+  const [customTags, setCustomTags] = useState([]);
+  const [newTagInput, setNewTagInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('latest'); // 'latest' | 'name' | 'role'
   const [tagFilter, setTagFilter] = useState('');
@@ -376,7 +379,7 @@ const Characters = () => {
   // Full Page Create/Edit View
   if (viewMode === 'create' || viewMode === 'edit') {
     return (
-      <div className="min-h-screen p-6">
+      <div className="min-h-screen p-6 pb-64">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button
@@ -476,16 +479,15 @@ const Characters = () => {
               <div>
                 <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">เพศ</label>
                 <div className="glass-dropdown-wrapper w-full">
-                  <select
+                  <GlassDropdown
                     value={formData.gender}
-                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="glass-dropdown w-full"
-                  >
-                    <option value="" className="bg-slate-900 text-white">-- เลือก --</option>
-                    {GENDER_OPTIONS.map(g => (
-                      <option key={g} value={g} className="bg-slate-900 text-white">{g}</option>
-                    ))}
-                  </select>
+                    onChange={(newValue) => setFormData({ ...formData, gender: newValue })}
+                    options={[
+                      { value: '', label: '-- เลือก --' },
+                      ...GENDER_OPTIONS.map(g => ({ value: g, label: g }))
+                    ]}
+                    buttonClassName="glass-dropdown w-full"
+                  />
                 </div>
               </div>
 
@@ -493,31 +495,33 @@ const Characters = () => {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">บทบาท</label>
                   <div className="glass-dropdown-wrapper w-full">
-                    <select
+                    <GlassDropdown
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                      className="glass-dropdown w-full"
-                    >
-                      <option value="main" className="bg-slate-900 text-white">⭐ ตัวเอก</option>
-                      <option value="supporting" className="bg-slate-900 text-white">👤 ตัวประกอบ</option>
-                      <option value="villain" className="bg-slate-900 text-white">😈 ตัวร้าย</option>
-                    </select>
+                      onChange={(newValue) => setFormData({ ...formData, role: newValue })}
+                      options={[
+                        { value: 'main', label: '⭐ ตัวเอก' },
+                        { value: 'supporting', label: '👤 ตัวประกอบ' },
+                        { value: 'villain', label: '😈 ตัวร้าย' }
+                      ]}
+                      buttonClassName="glass-dropdown w-full"
+                    />
                   </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">สไตล์เสียง</label>
                   <div className="glass-dropdown-wrapper w-full">
-                    <select
+                    <GlassDropdown
                       value={formData.voiceStyle}
-                      onChange={(e) => setFormData({ ...formData, voiceStyle: e.target.value })}
-                      className="glass-dropdown w-full"
-                    >
-                      <option value="normal" className="bg-slate-900 text-white">ปกติ</option>
-                      <option value="heroic" className="bg-slate-900 text-white">กล้าหาญ</option>
-                      <option value="gentle" className="bg-slate-900 text-white">อ่อนโยน</option>
-                      <option value="villain" className="bg-slate-900 text-white">ชั่วร้าย</option>
-                      <option value="comic" className="bg-slate-900 text-white">ตลก</option>
-                    </select>
+                      onChange={(newValue) => setFormData({ ...formData, voiceStyle: newValue })}
+                      options={[
+                        { value: 'normal', label: 'ปกติ' },
+                        { value: 'heroic', label: 'กล้าหาญ' },
+                        { value: 'gentle', label: 'อ่อนโยน' },
+                        { value: 'villain', label: 'ชั่วร้าย' },
+                        { value: 'comic', label: 'ตลก' }
+                      ]}
+                      buttonClassName="glass-dropdown w-full"
+                    />
                   </div>
                 </div>
               </div>
@@ -534,45 +538,36 @@ const Characters = () => {
                 {Object.entries(APPEARANCE_OPTIONS).map(([key, { label }]) => (
                   <div key={key}>
                     <label className="block text-xs text-slate-400 mb-1">{label}</label>
-                    <div className="flex gap-1">
-                      <select
-                        value={formData.appearance[key] || ''}
-                        onChange={(e) => updateAppearance(key, e.target.value)}
-                        className="flex-1 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-500"
-                      >
-                        <option value="" className="bg-slate-900 text-white">-- เลือก --</option>
-                        {getOptionsForKey(key).map(opt => (
-                          <option key={opt} value={opt} className="bg-slate-900 text-white">{opt}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newVal = prompt(`เพิ่ม${label}ใหม่:`);
-                          if (newVal?.trim()) {
-                            setCustomOptions(prev => ({
-                              ...prev,
-                              [key]: [...(prev[key] || []), newVal.trim()]
-                            }));
-                          }
-                        }}
-                        className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors"
-                        title={`เพิ่ม${label}`}
-                      >
-                        <PlusCircle size={16} />
-                      </button>
-                    </div>
-                    {/* Show custom options with delete */}
-                    {customOptions[key]?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {customOptions[key].map(opt => (
-                          <span key={opt} className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-300 text-xs rounded-full">
-                            {opt}
-                            <button onClick={() => removeCustomOption(key, opt)} className="hover:text-white">
-                              <X size={12} />
-                            </button>
-                          </span>
-                        ))}
+                    <GlassDropdown
+                      value={formData.appearance[key] || ''}
+                      onChange={(newValue) => updateAppearance(key, newValue)}
+                      options={[
+                        { value: '', label: '-- เลือก --' },
+                        ...getOptionsForKey(key).map(opt => ({ value: opt, label: opt }))
+                      ]}
+                      buttonClassName="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-500"
+                      onAddNew={(newVal) => {
+                        setCustomOptions(prev => ({
+                          ...prev,
+                          [key]: [...(prev[key] || []), newVal]
+                        }));
+                      }}
+                      addNewPlaceholder={`เพิ่ม${label}ใหม่...`}
+                    />
+                    {/* Show selected value with delete button */}
+                    {formData.appearance[key] && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-full">
+                          {formData.appearance[key]}
+                          <button 
+                            type="button"
+                            onClick={() => updateAppearance(key, '')} 
+                            className="hover:text-white"
+                            title="ลบค่านี้"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -581,10 +576,54 @@ const Characters = () => {
             </div>
 
             {/* Tags */}
-            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 mb-96">
               <h3 className="text-sm font-bold text-red-300 uppercase tracking-widest mb-4">🏷️ Tags (สำหรับจัดหมวดหมู่)</h3>
+              
+              {/* Add New Tag Input */}
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newTagInput.trim()) {
+                      const newTag = newTagInput.trim();
+                      if (!customTags.includes(newTag) && !DEFAULT_TAGS.includes(newTag)) {
+                        setCustomTags(prev => [...prev, newTag]);
+                      }
+                      if (!(formData.tags || []).includes(newTag)) {
+                        setFormData(prev => ({ ...prev, tags: [...(prev.tags || []), newTag] }));
+                      }
+                      setNewTagInput('');
+                    }
+                  }}
+                  placeholder="เพิ่ม tag ใหม่..."
+                  className="flex-1 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:border-green-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newTagInput.trim()) {
+                      const newTag = newTagInput.trim();
+                      if (!customTags.includes(newTag) && !DEFAULT_TAGS.includes(newTag)) {
+                        setCustomTags(prev => [...prev, newTag]);
+                      }
+                      if (!(formData.tags || []).includes(newTag)) {
+                        setFormData(prev => ({ ...prev, tags: [...(prev.tags || []), newTag] }));
+                      }
+                      setNewTagInput('');
+                    }
+                  }}
+                  disabled={!newTagInput.trim()}
+                  className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+
+              {/* All Tags (Default + Custom) */}
               <div className="flex flex-wrap gap-2">
-                {DEFAULT_TAGS.map(tag => (
+                {[...DEFAULT_TAGS, ...customTags].map(tag => (
                   <button
                     key={tag}
                     type="button"
@@ -599,10 +638,25 @@ const Characters = () => {
                   </button>
                 ))}
               </div>
-              {/* Selected Tags */}
+
+              {/* Selected Tags with Delete */}
               {formData.tags?.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-white/10">
+                <div className="mt-4 pt-4 border-t border-white/10">
                   <p className="text-xs text-slate-500 mb-2">เลือกแล้ว: {formData.tags.length} tags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.tags.map(tag => (
+                      <span key={tag} className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-300 text-sm rounded-lg">
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }))}
+                          className="hover:text-white ml-1"
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -628,17 +682,18 @@ const Characters = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-4 mt-24">
               <button
                 onClick={() => { setViewMode('list'); resetForm(); }}
-                className="px-6 py-3.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-2xl transition-all duration-300"
+                className="group relative px-6 py-3.5 bg-gradient-to-r from-red-500/20 via-red-500/10 to-orange-500/20 backdrop-blur-md border border-red-500/40 text-red-200 hover:text-white hover:border-red-400/60 rounded-2xl transition-all duration-300 shadow-lg shadow-red-500/20 overflow-hidden"
               >
+                <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/20 to-orange-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                 ยกเลิก
               </button>
               <button
                 onClick={handleSave}
                 disabled={!formData.name.trim() || saving}
-                className="group relative flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:via-emerald-400 hover:to-teal-400 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-2xl font-bold transition-all duration-300 shadow-xl shadow-emerald-500/40 hover:shadow-emerald-500/60 hover:scale-105 overflow-hidden"
+                className="group relative flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-red-600 via-red-500 to-orange-500 hover:from-red-500 hover:via-orange-500 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-2xl font-bold transition-all duration-300 shadow-xl shadow-red-500/40 hover:shadow-orange-500/60 hover:scale-105 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
                 {saving ? <Loader2 size={20} className="animate-spin relative z-10" /> : <Save size={20} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />}
@@ -694,31 +749,32 @@ const Characters = () => {
 
         {/* Sort Dropdown */}
         <div className="glass-dropdown-wrapper">
-          <select
+          <GlassDropdown
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="glass-dropdown pr-10"
-          >
-            <option value="latest" className="bg-slate-800">🕐 ล่าสุด</option>
-            <option value="name" className="bg-slate-800">🔤 ชื่อ A-Z</option>
-            <option value="role" className="bg-slate-800">👤 บทบาท</option>
-          </select>
+            onChange={setSortBy}
+            options={[
+              { value: 'latest', label: '🕐 ล่าสุด' },
+              { value: 'name', label: '🔤 ชื่อ A-Z' },
+              { value: 'role', label: '👤 บทบาท' }
+            ]}
+            buttonClassName="glass-dropdown pr-10"
+          />
           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
         </div>
 
         {/* Tag Filter */}
         {allUsedTags.length > 0 && (
           <div className="glass-dropdown-wrapper">
-            <select
+            <GlassDropdown
               value={tagFilter}
-              onChange={(e) => setTagFilter(e.target.value)}
-              className="glass-dropdown pr-10"
-            >
-              <option value="" className="bg-slate-800">🏷️ ทุก Tag</option>
-              {allUsedTags.map(tag => (
-                <option key={tag} value={tag} className="bg-slate-800">{tag}</option>
-              ))}
-            </select>
+              onChange={setTagFilter}
+              placeholder="🏷️ ทุก Tag"
+              options={[
+                { value: '', label: '🏷️ ทุก Tag' },
+                ...allUsedTags.map(tag => ({ value: tag, label: tag }))
+              ]}
+              buttonClassName="glass-dropdown pr-10"
+            />
             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
           </div>
         )}

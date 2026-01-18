@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Loader2, Play, Save, Trash2, Plus, GripVertical, ChevronDown } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
+import GlassDropdown from './ui/GlassDropdown';
 
 const AutomationBuilder = () => {
     const [recipes, setRecipes] = useState([]);
@@ -210,16 +211,16 @@ const AutomationBuilder = () => {
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Target Project
                         </label>
                         <div className="relative">
-                            <select
+                            <GlassDropdown
                                 value={selectedProjectId}
-                                onChange={(e) => setSelectedProjectId(e.target.value)}
-                                className="w-full appearance-none bg-black/40 border border-white/10 rounded-lg pl-3 pr-8 py-2.5 text-sm text-white focus:border-red-500 outline-none cursor-pointer hover:bg-black/60 transition-all font-medium"
-                            >
-                                {projects.length === 0 && <option value="">No Projects Found</option>}
-                                {projects.map(p => (
-                                    <option key={p.id} value={p.id} className="bg-slate-900">{p.name}</option>
-                                ))}
-                            </select>
+                                onChange={setSelectedProjectId}
+                                options={
+                                    projects.length === 0
+                                        ? [{ value: '', label: 'No Projects Found', disabled: true }]
+                                        : projects.map(p => ({ value: p.id, label: p.name }))
+                                }
+                                buttonClassName="w-full appearance-none bg-black/40 border border-white/10 rounded-lg pl-3 pr-8 py-2.5 text-sm text-white focus:border-red-500 outline-none cursor-pointer hover:bg-black/60 transition-all font-medium"
+                            />
                             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
                     </div>
@@ -347,17 +348,18 @@ const AutomationBuilder = () => {
                             <div className="p-6 bg-white/5 border-t border-white/5">
                                 <div className="flex gap-4 items-center">
                                     <div className="relative">
-                                        <select
-                                            className="appearance-none bg-black/40 border border-white/10 rounded-xl px-4 py-3 pr-10 text-white focus:outline-none focus:border-red-500 font-medium cursor-pointer hover:bg-black/60 transition-colors"
+                                        <GlassDropdown
                                             value={newStep.type}
-                                            onChange={(e) => setNewStep({ ...newStep, type: e.target.value })}
-                                        >
-                                            <option value="GOTO">🌐 GOTO URL</option>
-                                            <option value="CLICK_SELECTOR">🖱️ CLICK (Selector)</option>
-                                            <option value="TYPE">⌨️ TYPE Text</option>
-                                            <option value="WAIT_UNTIL">⏳ WAIT Condition</option>
-                                            <option value="SLEEP">💤 SLEEP (Time)</option>
-                                        </select>
+                                            onChange={(newType) => setNewStep({ ...newStep, type: newType })}
+                                            options={[
+                                                { value: 'GOTO', label: '🌐 GOTO URL' },
+                                                { value: 'CLICK_SELECTOR', label: '🖱️ CLICK (Selector)' },
+                                                { value: 'TYPE', label: '⌨️ TYPE Text' },
+                                                { value: 'WAIT_UNTIL', label: '⏳ WAIT Condition' },
+                                                { value: 'SLEEP', label: '💤 SLEEP (Time)' }
+                                            ]}
+                                            buttonClassName="appearance-none bg-black/40 border border-white/10 rounded-xl px-4 py-3 pr-10 text-white focus:outline-none focus:border-red-500 font-medium cursor-pointer hover:bg-black/60 transition-colors"
+                                        />
                                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
                                     </div>
 

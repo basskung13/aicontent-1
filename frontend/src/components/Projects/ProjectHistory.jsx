@@ -15,6 +15,7 @@ import {
 import { twMerge } from 'tailwind-merge';
 import { db, auth } from '../../firebase';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import GlassDropdown from '../ui/GlassDropdown';
 
 export default function ProjectHistory({ projectId }) {
     const [filterStatus, setFilterStatus] = useState('ALL'); // ALL, SUCCESS, ERROR
@@ -103,31 +104,33 @@ export default function ProjectHistory({ projectId }) {
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
                         <Calendar size={14} className="text-gray-400" />
                         <span className="text-xs font-bold text-gray-300 uppercase">Time:</span>
-                        <select
+                        <GlassDropdown
                             value={filterTime}
-                            onChange={(e) => setFilterTime(e.target.value)}
-                            className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer"
-                        >
-                            <option value="ALL" className="bg-slate-900">ALL TIME</option>
-                            <option value="24H" className="bg-slate-900">LAST 24 HOURS</option>
-                            <option value="7D" className="bg-slate-900">LAST 7 DAYS</option>
-                            <option value="30D" className="bg-slate-900">LAST 30 DAYS</option>
-                        </select>
+                            onChange={setFilterTime}
+                            options={[
+                                { value: 'ALL', label: 'ALL TIME' },
+                                { value: '24H', label: 'LAST 24 HOURS' },
+                                { value: '7D', label: 'LAST 7 DAYS' },
+                                { value: '30D', label: 'LAST 30 DAYS' }
+                            ]}
+                            buttonClassName="bg-transparent text-white text-xs font-bold outline-none cursor-pointer"
+                        />
                     </div>
 
                     {/* STATUS FILTER */}
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
                         <Filter size={14} className="text-gray-400" />
                         <span className="text-xs font-bold text-gray-300 uppercase">Status:</span>
-                        <select
+                        <GlassDropdown
                             value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                            className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer"
-                        >
-                            <option value="ALL" className="bg-gray-900">ALL EVENTS</option>
-                            <option value="SUCCESS" className="bg-gray-900">✅ SUCCESS</option>
-                            <option value="ERROR" className="bg-gray-900">❌ ERRORS</option>
-                        </select>
+                            onChange={setFilterStatus}
+                            options={[
+                                { value: 'ALL', label: 'ALL EVENTS' },
+                                { value: 'SUCCESS', label: '✅ SUCCESS' },
+                                { value: 'ERROR', label: '❌ ERRORS' }
+                            ]}
+                            buttonClassName="bg-transparent text-white text-xs font-bold outline-none cursor-pointer"
+                        />
                     </div>
 
                     <div className="flex bg-black/40 rounded-lg p-1 border border-white/5">

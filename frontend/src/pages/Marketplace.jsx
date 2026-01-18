@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ShoppingBag, Search, Star, Download, Clock, History, LayoutGrid, CheckCircle, Loader2, Sparkles, Gift, ShoppingCart, Filter, X, Coins, AlertCircle, Store, MoreVertical, Play, ExternalLink, Wallet, ChevronDown } from 'lucide-react';
+import GlassDropdown from '../components/ui/GlassDropdown';
 import { db, auth } from '../firebase';
 import { doc, setDoc, addDoc, collection, serverTimestamp, query, where, getDocs, orderBy, updateDoc, increment, getDoc, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -1013,18 +1014,22 @@ const Marketplace = () => {
                                     
                                     {/* Dropdown Category */}
                                     <div className="glass-dropdown-wrapper min-w-[200px]">
-                                        <select
+                                        <GlassDropdown
                                             value={selectedCategory === 'all' ? '' : selectedCategory}
-                                            onChange={(e) => { setSelectedCategory(e.target.value || 'all'); setShowMyListings(false); setShowMyFreePublish(false); }}
-                                            className="glass-dropdown pr-10 w-full"
-                                        >
-                                            <option value="" className="bg-slate-800">เลือก Category</option>
-                                            {CATEGORIES.filter(cat => cat.id !== 'all').map(cat => (
-                                                <option key={cat.id} value={cat.id} className="bg-slate-800">
-                                                    {cat.icon} {cat.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={(newValue) => {
+                                                setSelectedCategory(newValue || 'all');
+                                                setShowMyListings(false);
+                                                setShowMyFreePublish(false);
+                                            }}
+                                            options={[
+                                                { value: '', label: 'เลือก Category' },
+                                                ...CATEGORIES.filter(cat => cat.id !== 'all').map(cat => ({
+                                                    value: cat.id,
+                                                    label: `${cat.icon} ${cat.name}`
+                                                }))
+                                            ]}
+                                            buttonClassName="glass-dropdown pr-10 w-full"
+                                        />
                                         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
                                     </div>
                                 </div>
