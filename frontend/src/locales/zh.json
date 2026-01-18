@@ -1,0 +1,14 @@
+{
+    "common": {
+        "dashboard": "仪表板",
+        "projects": "项目",
+        "settings": "设置",
+        "login": "登录",
+        "logout": "登出"
+    },
+    "dashboard": {
+        "welcome": "欢迎回来",
+        "active_projects": "进行中的项目",
+        "todays_posts": "今天的帖子"
+    }
+}

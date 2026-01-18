@@ -1,0 +1,7 @@
+2026/01/13-20:03:39.877 6a7c Reusing MANIFEST C:\content-auto-post\desktop-agent\profiles\2pZgyY7Qunr7yXBECknw\Default\IndexedDB\https_labs.google_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/13-20:03:39.893 6a7c Recovering log #3
+2026/01/13-20:03:39.894 6a7c Reusing old log C:\content-auto-post\desktop-agent\profiles\2pZgyY7Qunr7yXBECknw\Default\IndexedDB\https_labs.google_0.indexeddb.leveldb/000003.log 
+2026/01/13-20:03:40.499 4a34 Level-0 table #5: started
+2026/01/13-20:03:40.520 4a34 Level-0 table #5: 1295 bytes OK
+2026/01/13-20:03:40.523 4a34 Delete type=0 #3
+2026/01/13-20:03:40.524 304c Manual compaction at level-0 from '\x00\x01\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x02\x00\x00\x00' @ 0 : 0; will stop at (end)

@@ -1,0 +1,81 @@
+# Content Auto Post — Master Plan & Work Checklist
+
+> ใช้ไฟล์นี้สำหรับติดตามงานและติ๊กเมื่อทำเสร็จ
+
+---
+
+## ✅ Phase 0: เตรียมความพร้อม (DONE)
+- [x] ติดตั้ง Node.js, VS Code, Git, Chrome
+- [x] สมัคร Firebase, Stripe, OpenAI
+- [x] Enable Firebase Blaze Plan
+
+## ✅ Phase 1-2: Firebase + Web App Core (DONE)
+- [x] Setup Firebase project + Collections schema
+- [x] Install Firebase CLI + Login
+- [x] Create Firebase config files
+- [x] Setup Functions folder
+- [/] Deploy Firebase rules & functions (Rules/Storage deployed)
+- [x] สร้าง Web App (React + i18n)
+- [x] Time Slot Picker
+- [x] Edit Mode for Slots
+
+## ✅ Phase 3: The Engine (Mode Creator) (DONE)
+- [x] Design Data Structure (Mode JSON Schema)
+- [x] Build `ModeBuilder.jsx` (Stack of Cards UI)
+- [x] Implement `VariableInput` Component
+- [x] Mode Library (Save/Load Private Modes)
+
+---
+
+# 🔥 CURRENT WORK — Extension (Browser-First Automation)
+
+## Priority 1: Extension Core Bugs
+- [ ] Debug: scheduled jobs ไม่แสดงใน UI
+- [ ] Debug: Slot time vs Calculator time mismatch
+
+## Priority 2: Testing & Validation
+- [ ] Test "Producer" Recording (e.g., Flow.ai)
+- [ ] Test "Distributor" Recording (e.g., TikTok)
+- [ ] **End-to-End Test:** Run Producer → Save File → Run Distributor → Upload File
+
+## Priority 3: Missing Features
+- [ ] Garbage Collector: Auto-delete assets older than 48 hours
+- [ ] Garbage Collector: Create logic to fetch Blob from storage
+- [ ] Garbage Collector: Inject Blob into `<input type="file">` on target page
+- [ ] Zero-Skip Observer: DOM Counting & Retry Logic
+- [ ] Step Player: Click/Type/Wait implementation
+
+---
+
+# 📅 FUTURE PHASES
+
+## Phase 4: The Economy (Marketplace) — Deferred
+- [ ] Marketplace UI (Storefront)
+- [ ] Transaction Logs
+- [ ] User Wallet & Credits System
+- [ ] Licensing Logic (Trial vs Owned)
+
+## Phase 5-8: Advanced Features — Future
+- [ ] AI Planning (OpenAI)
+- [ ] Mode Marketplace
+- [ ] Multi-language (TH/EN/ZH)
+- [ ] AI Chatbot Support
+- [ ] Admin Panel
+
+## Phase 6: Self-Healing AI — Future
+- [ ] Error Detection: Detect failed selector (Timeout)
+- [ ] Error Detection: Capture HTML Snapshot
+- [ ] AI Integration: Send Snapshot to Gemini/OpenAI
+- [ ] AI Integration: Receive new selector
+- [ ] AI Integration: Retry action & Update Recipe
+- [ ] Automated Repair: AI analyzes screenshot
+
+## Phase 9-12: Launch
+- [ ] Testing
+- [ ] Deployment
+- [ ] Soft Launch
+- [ ] Public Launch 🚀
+
+---
+
+*Last Updated: 2026-01-15*
