@@ -194,22 +194,25 @@ export default function Platforms() {
         <div className="p-8 max-w-6xl mx-auto relative">
             <Toast message={toast.message} isVisible={toast.isVisible} />
 
-            <header className="mb-8 flex items-center gap-4">
-                <div className="relative group">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/30 animate-pulse group-hover:scale-110 transition-transform duration-300">
-                        <Share2 size={32} className="text-white group-hover:rotate-12 transition-transform duration-300" />
+            {/* Header - Unified Style */}
+            <header className="mb-8 relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
+                <div className="flex items-center gap-4">
+                    <div className="relative group">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
+                            <Share2 size={32} className="text-white group-hover:rotate-12 transition-transform duration-300" />
+                        </div>
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
+                            <span className="text-[8px] font-bold text-black">{accounts.length}</span>
+                        </div>
                     </div>
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
-                        <span className="text-[8px] font-bold text-black">{accounts.length}</span>
+                    <div>
+                        <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">Managed Accounts</h1>
+                        <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                            <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
+                            กำหนด Label บัญชีสำหรับ Automation Agents
+                        </p>
                     </div>
-                </div>
-                <div>
-                    <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-100 to-pink-200 drop-shadow-2xl tracking-tight">Managed Accounts</h1>
-                    <p className="text-lg text-purple-200/60 font-light flex items-center gap-2 mt-1">
-                        <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        กำหนด Label บัญชีสำหรับ Automation Agents
-                    </p>
                 </div>
             </header>
 
