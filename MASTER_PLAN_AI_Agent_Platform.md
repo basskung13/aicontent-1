@@ -110,6 +110,7 @@
 
 ## ✅ Recent UI Fixes
 - Projects page crash (ReferenceError: Key not defined) → เพิ่ม Key icon import ใน `frontend/src/pages/Projects.jsx`
+- Timezone dropdown: กระจกขุ่นสีเข้ม + เปิดได้แน่นอน + แสดงเหนือทุกบล็อก (portal + z-index)
 
 ---
 
@@ -166,4 +167,4 @@
 
 ---
 
-*Updated: 2026-01-08*
+*Updated: 2026-01-19*

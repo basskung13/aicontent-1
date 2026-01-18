@@ -31,6 +31,7 @@
 
 ## Recent UI Fixes
 - Projects page crash (ReferenceError: Key not defined) → เพิ่ม Key icon import ใน `frontend/src/pages/Projects.jsx`
+- Timezone dropdown: กระจกขุ่นสีเข้ม + เปิดได้แน่นอน + แสดงเหนือทุกบล็อก (portal + z-index)
 
 ## Backend & Safety Buffers
 - **Idempotency**: approve only once per request
@@ -44,4 +45,4 @@
 - Create Firestore composite index:
   - `payment_requests` where `userId` + orderBy `createdAt`
 
-*Last Updated: 2026-01-17*
+*Last Updated: 2026-01-19*

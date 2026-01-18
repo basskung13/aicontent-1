@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, Folder, LayoutGrid, List, ArrowRight, Loader2, Play, Square, Layers, AlignLeft, Pencil, Check, X, Terminal, Clock, Activity, Filter, Youtube, Facebook, Video, ChevronDown, Trash2, Sparkles, Camera, Key } from 'lucide-react';
+import { Plus, Folder, LayoutGrid, List, ArrowRight, Loader2, Play, Square, Layers, AlignLeft, Pencil, Check, X, Terminal, Clock, Activity, Filter, Youtube, Facebook, Video, ChevronDown, Trash2, Sparkles, Camera, Key, FlaskConical, Copy, CheckCircle, Hash, FileText } from 'lucide-react';
 import { db, auth, functions, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
@@ -34,15 +35,58 @@ export default function Projects() {
     const [expanders, setExpanders] = useState([]);
     const [selectedExpanderId, setSelectedExpanderId] = useState('');
 
+    // --- TEST PROMPT PIPELINE STATE ---
+    const [isTestingPrompt, setIsTestingPrompt] = useState(false);
+    const [testResult, setTestResult] = useState(null);
+    const [copiedIndex, setCopiedIndex] = useState(null);
+
     // --- NEW: Firestore Sequences Sync ---
     const [userTimezone, setUserTimezone] = useState('Asia/Bangkok'); // Added back
     const [currentTime, setCurrentTime] = useState(new Date()); // RTC State
+    const [isTimezoneDropdownOpen, setIsTimezoneDropdownOpen] = useState(false); // Timezone dropdown state
+    const [timezoneDropdownPos, setTimezoneDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+    const timezoneButtonRef = useRef(null);
+    const timezoneDropdownRef = useRef(null);
 
     // Real-time Clock Ticker
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
+
+    // Timezone Dropdown: position + click outside
+    useEffect(() => {
+        if (!isTimezoneDropdownOpen) return;
+
+        const buttonEl = timezoneButtonRef.current;
+        const updatePosition = () => {
+            if (!buttonEl) return;
+            const rect = buttonEl.getBoundingClientRect();
+            setTimezoneDropdownPos({
+                top: rect.bottom + 8,
+                left: rect.left,
+                width: rect.width
+            });
+        };
+
+        const handleClickOutside = (event) => {
+            if (!timezoneDropdownRef.current || !buttonEl) return;
+            if (!timezoneDropdownRef.current.contains(event.target) && !buttonEl.contains(event.target)) {
+                setIsTimezoneDropdownOpen(false);
+            }
+        };
+
+        updatePosition();
+        window.addEventListener('resize', updatePosition);
+        window.addEventListener('scroll', updatePosition, true);
+        document.addEventListener('mousedown', handleClickOutside);
+
+        return () => {
+            window.removeEventListener('resize', updatePosition);
+            window.removeEventListener('scroll', updatePosition, true);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isTimezoneDropdownOpen]);
 
     // Fetch User Timezone on Load
     useEffect(() => {
@@ -152,11 +196,6 @@ export default function Projects() {
                         loadedModes.push({ id: doc.id, ...doc.data() });
                     });
                     setModes(loadedModes);
-
-                    // Auto-select first mode if none selected
-                    if (loadedModes.length > 0 && !selectedModeId) {
-                        setSelectedModeId(loadedModes[0].id);
-                    }
                 });
                 
                 // 3. Fetch Expanders
@@ -233,9 +272,18 @@ export default function Projects() {
     // --- SYNC MODE SELECTION & VARIABLES & EXPANDER ---
     useEffect(() => {
         if (selectedProject) {
-            // 1. Sync Mode ID
-            if (selectedProject.executionModeId) {
-                setSelectedModeId(selectedProject.executionModeId);
+            // 1. Sync Mode ID - Only if mode exists in modes array
+            if (selectedProject.executionModeId && modes.length > 0) {
+                const modeExists = modes.some(m => m.id === selectedProject.executionModeId);
+                if (modeExists) {
+                    setSelectedModeId(selectedProject.executionModeId);
+                } else {
+                    // Mode doesn't exist, select first available
+                    setSelectedModeId(modes[0].id);
+                }
+            } else if (modes.length > 0 && !selectedProject.executionModeId) {
+                // No mode saved, auto-select first
+                setSelectedModeId(modes[0].id);
             } else {
                 setSelectedModeId('');
             }
@@ -258,7 +306,7 @@ export default function Projects() {
             setFormValues({});
             setSelectedExpanderId('');
         }
-    }, [selectedProject]);
+    }, [selectedProject, modes]);
 
     // --- NEW: SCHEDULING & LOGS STATE ---
     const [mockLogs, setMockLogs] = useState([]);
@@ -484,6 +532,44 @@ export default function Projects() {
         }
     };
 
+    // --- TEST PROMPT PIPELINE HANDLER ---
+    const handleTestPromptPipeline = async () => {
+        if (!currentUser || !selectedProject) return;
+        
+        setIsTestingPrompt(true);
+        setTestResult(null);
+        
+        try {
+            const testPromptPipeline = httpsCallable(functions, 'testPromptPipeline');
+            const result = await testPromptPipeline({ projectId: selectedProject.id });
+            
+            console.log('✅ Test Pipeline Result:', result.data);
+            setTestResult(result.data);
+        } catch (error) {
+            console.error('❌ Test Pipeline Error:', error);
+            let msg = error.message;
+            if (error.code === 'failed-precondition') msg = error.message;
+            if (error.code === 'not-found') msg = 'Mode หรือ Project ไม่พบ';
+            alert(`Error: ${msg}`);
+        } finally {
+            setIsTestingPrompt(false);
+        }
+    };
+
+    const handleCopyPrompt = (text, index) => {
+        navigator.clipboard.writeText(text);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
+    const handleCopyAllPrompts = () => {
+        if (!testResult?.prompts) return;
+        const allPrompts = testResult.prompts.map((p, i) => `[Scene ${i + 1}]\n${p.englishPrompt}`).join('\n\n');
+        navigator.clipboard.writeText(allPrompts);
+        setCopiedIndex('all');
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
     const handleStartEdit = (e, project) => {
         e.stopPropagation();
         setEditingProjectId(project.id);
@@ -561,7 +647,7 @@ export default function Projects() {
     return (
         <div className="p-8 max-w-6xl mx-auto min-h-screen">
             {/* Header - Unified Style */}
-            <header className="mb-8 relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden">
+            <header className="mb-8 relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
                 <div className="flex justify-between items-start">
                     <div className="flex items-center gap-4">
@@ -582,22 +668,75 @@ export default function Projects() {
                         </div>
                     </div>
 
-                    {/* TIME ZONE SELECTOR & CLOCK */}
+                    {/* TIME ZONE SELECTOR & CLOCK - Custom Dropdown with Flags */}
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-xl p-2 pr-4 shadow-lg">
                             <div className="relative">
-                                <select
-                                    value={userTimezone}
-                                    onChange={handleTimezoneChange}
-                                    className="appearance-none bg-white/5 rounded-lg pl-3 pr-8 py-2 text-sm text-yellow-400 font-bold outline-none cursor-pointer w-56 border border-yellow-500/20 hover:border-yellow-500/40 transition-colors"
+                                {/* Custom Timezone Button */}
+                                <button
+                                    ref={timezoneButtonRef}
+                                    onClick={() => {
+                                        const buttonEl = timezoneButtonRef.current;
+                                        if (buttonEl) {
+                                            const rect = buttonEl.getBoundingClientRect();
+                                            setTimezoneDropdownPos({
+                                                top: rect.bottom + 8,
+                                                left: rect.left,
+                                                width: rect.width
+                                            });
+                                        }
+                                        setIsTimezoneDropdownOpen((open) => !open);
+                                    }}
+                                    className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2 text-sm text-yellow-400 font-bold cursor-pointer w-56 border border-yellow-500/20 hover:border-yellow-500/40 transition-colors"
                                 >
-                                    <option value="Asia/Bangkok" className="bg-slate-900 text-white">🇹🇭 Thailand (GMT+7)</option>
-                                    <option value="Europe/London" className="bg-slate-900 text-white">🇬🇧 United Kingdom (GMT+0)</option>
-                                    <option value="Asia/Shanghai" className="bg-slate-900 text-white">🇨🇳 China (GMT+8)</option>
-                                    <option value="Asia/Seoul" className="bg-slate-900 text-white">🇰🇷 South Korea (GMT+9)</option>
-                                    <option value="Asia/Taipei" className="bg-slate-900 text-white">🇹🇼 Taiwan (GMT+8)</option>
-                                </select>
-                                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-yellow-500 pointer-events-none" />
+                                    <img 
+                                        src={`https://flagcdn.com/24x18/${userTimezone === 'Asia/Bangkok' ? 'th' : userTimezone === 'Europe/London' ? 'gb' : userTimezone === 'Asia/Shanghai' ? 'cn' : userTimezone === 'Asia/Seoul' ? 'kr' : 'tw'}.png`}
+                                        alt="flag"
+                                        className="w-6 h-4 object-cover rounded-sm"
+                                    />
+                                    <span className="flex-1 text-left">
+                                        {userTimezone === 'Asia/Bangkok' && 'Thailand (GMT+7)'}
+                                        {userTimezone === 'Europe/London' && 'UK (GMT+0)'}
+                                        {userTimezone === 'Asia/Shanghai' && 'China (GMT+8)'}
+                                        {userTimezone === 'Asia/Seoul' && 'Korea (GMT+9)'}
+                                        {userTimezone === 'Asia/Taipei' && 'Taiwan (GMT+8)'}
+                                    </span>
+                                    <ChevronDown size={14} className={`text-yellow-500 transition-transform ${isTimezoneDropdownOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                
+                                {/* Dropdown Options - Dark Frosted Glass */}
+                                {isTimezoneDropdownOpen && createPortal(
+                                    <div
+                                        ref={timezoneDropdownRef}
+                                        className="fixed bg-slate-900/90 backdrop-blur-3xl border border-white/20 rounded-2xl shadow-[0_30px_90px_rgba(0,0,0,0.95)] z-[999999] overflow-hidden"
+                                        style={{
+                                            top: timezoneDropdownPos.top,
+                                            left: timezoneDropdownPos.left,
+                                            width: Math.max(256, timezoneDropdownPos.width)
+                                        }}
+                                    >
+                                        {[
+                                            { value: 'Asia/Bangkok', code: 'th', label: 'Thailand (GMT+7)' },
+                                            { value: 'Europe/London', code: 'gb', label: 'United Kingdom (GMT+0)' },
+                                            { value: 'Asia/Shanghai', code: 'cn', label: 'China (GMT+8)' },
+                                            { value: 'Asia/Seoul', code: 'kr', label: 'South Korea (GMT+9)' },
+                                            { value: 'Asia/Taipei', code: 'tw', label: 'Taiwan (GMT+8)' },
+                                        ].map(tz => (
+                                            <button
+                                                key={tz.value}
+                                                onClick={() => {
+                                                    handleTimezoneChange({ target: { value: tz.value } });
+                                                    setIsTimezoneDropdownOpen(false);
+                                                }}
+                                                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-colors ${userTimezone === tz.value ? 'bg-yellow-500/20 text-yellow-300 font-bold' : 'text-white'}`}
+                                            >
+                                                <img src={`https://flagcdn.com/24x18/${tz.code}.png`} alt="flag" className="w-6 h-4 object-cover rounded-sm shadow-sm" />
+                                                <span className="text-sm font-medium">{tz.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>,
+                                    document.body
+                                )}
                             </div>
 
                             <div className="w-[1px] h-6 bg-white/10"></div>
@@ -986,9 +1125,12 @@ export default function Projects() {
                                                 {/* Mode Info - Show when selected */}
                                                 {selectedModeId && (() => {
                                                     const selectedModeData = modes.find(m => m.id === selectedModeId);
-                                                    if (!selectedModeData) return null;
-                                                    const totalScenes = (selectedModeData.blocks || []).reduce((acc, block) => 
-                                                        acc + (block.evolution?.length || 0), 0);
+                                                    
+                                                    // Always show Mode Info section
+                                                    const totalScenes = selectedModeData 
+                                                        ? (selectedModeData.blocks || []).reduce((acc, block) => acc + (block.evolution?.length || 0), 0)
+                                                        : 0;
+                                                    
                                                     return (
                                                         <div className="flex items-start justify-between gap-4 pt-4 border-t border-purple-500/20">
                                                             {/* Left: Info */}
@@ -1000,30 +1142,36 @@ export default function Projects() {
                                                                 <p className="text-sm text-white/80 mb-3 leading-relaxed">
                                                                     🎯 <strong>Mode</strong> = "สูตรสำเร็จ" ในการสร้างวิดีโอ กำหนดว่าวิดีโอจะมีกี่ฉาก เล่าเรื่องแบบไหน ใช้ตัวละครอะไร
                                                                 </p>
-                                                                {selectedModeData.description && (
-                                                                    <p className="text-sm text-white/60 mb-3 italic border-l-2 border-purple-500/30 pl-3">{selectedModeData.description}</p>
+                                                                {selectedModeData ? (
+                                                                    <>
+                                                                        {selectedModeData.description && (
+                                                                            <p className="text-sm text-white/60 mb-3 italic border-l-2 border-purple-500/30 pl-3">{selectedModeData.description}</p>
+                                                                        )}
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="จำนวนตอนหลัก">
+                                                                                📽️ {(selectedModeData.blocks || []).length} ตอน
+                                                                            </span>
+                                                                            <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="จำนวนฉากทั้งหมด">
+                                                                                🎬 {totalScenes} ฉาก
+                                                                            </span>
+                                                                            {selectedModeData.storyOverview?.tone && (
+                                                                                <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="อารมณ์ของเรื่อง">
+                                                                                    🎭 {selectedModeData.storyOverview.tone}
+                                                                                </span>
+                                                                            )}
+                                                                            {(selectedModeData.characters || []).length > 0 && (
+                                                                                <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="ตัวละครที่ใช้">
+                                                                                    👥 {selectedModeData.characters.length} ตัวละคร
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <p className="text-yellow-400 text-sm">⏳ กำลังโหลดข้อมูล Mode... (ID: {selectedModeId})</p>
                                                                 )}
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="จำนวนตอนหลัก (เช่น เปิดเรื่อง, พัฒนา, ไคลแมกซ์)">
-                                                                        📽️ {(selectedModeData.blocks || []).length} ตอน
-                                                                    </span>
-                                                                    <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="จำนวนฉากทั้งหมดในวิดีโอ">
-                                                                        🎬 {totalScenes} ฉาก
-                                                                    </span>
-                                                                    {selectedModeData.storyOverview?.tone && (
-                                                                        <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="อารมณ์ของเรื่อง">
-                                                                            🎭 {selectedModeData.storyOverview.tone}
-                                                                        </span>
-                                                                    )}
-                                                                    {(selectedModeData.characters || []).length > 0 && (
-                                                                        <span className="px-2 py-1 rounded-lg text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30" title="ตัวละครที่ใช้ในเรื่อง">
-                                                                            👥 {selectedModeData.characters.length} ตัวละคร
-                                                                        </span>
-                                                                    )}
-                                                                </div>
                                                             </div>
                                                             {/* Right: Thumbnail */}
-                                                            {selectedModeData.coverImage && (
+                                                            {selectedModeData?.coverImage && (
                                                                 <div className="w-40 h-40 rounded-lg overflow-hidden border border-purple-500/30 shrink-0">
                                                                     <img src={selectedModeData.coverImage} alt={selectedModeData.name} className="w-full h-full object-cover" />
                                                                 </div>
@@ -1273,6 +1421,204 @@ export default function Projects() {
                                             : null;
                                         return <TimeSlotPicker projectId={selectedProject.id} modeScenes={modeScenes} key={`${selectedProject.id}-${modeScenes}`} />;
                                     })()}
+
+                                    {/* ========================================== */}
+                                    {/* TEST PROMPT PIPELINE SECTION */}
+                                    {/* ========================================== */}
+                                    <div className="mt-8 bg-gradient-to-br from-purple-900/20 via-slate-900/40 to-indigo-900/20 backdrop-blur-xl rounded-2xl border border-purple-500/20 p-6 shadow-xl">
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between mb-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                                                    <FlaskConical size={20} className="text-white" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-white">Test Prompt Pipeline</h3>
+                                                    <p className="text-xs text-purple-300/60">ทดสอบสร้าง Prompts จาก Mode + Expander ก่อนใช้งานจริง</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={handleTestPromptPipeline}
+                                                disabled={isTestingPrompt || !selectedModeId}
+                                                className={`group relative flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 overflow-hidden ${
+                                                    !selectedModeId 
+                                                        ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                                                        : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:scale-105 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50'
+                                                }`}
+                                            >
+                                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                                {isTestingPrompt ? (
+                                                    <>
+                                                        <Loader2 size={18} className="animate-spin" />
+                                                        <span>Generating...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Play size={18} />
+                                                        <span>Generate Test</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        {/* No Mode Selected Warning */}
+                                        {!selectedModeId && (
+                                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
+                                                <p className="text-yellow-400 text-sm">⚠️ กรุณาเลือก Mode ก่อนทดสอบ</p>
+                                            </div>
+                                        )}
+
+                                        {/* Test Result Display */}
+                                        {testResult && (
+                                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                                                {/* Success Header */}
+                                                <div className="flex items-center justify-between bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <CheckCircle size={24} className="text-green-400" />
+                                                        <div>
+                                                            <p className="text-green-400 font-bold">✅ สร้าง {testResult.prompts?.length || 0} Prompts สำเร็จ!</p>
+                                                            <p className="text-green-300/60 text-xs">Mode: {testResult.modeInfo?.name || testResult.modeName} | Scenes: {testResult.modeInfo?.sceneCount || testResult.sceneCount}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={handleCopyAllPrompts}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-green-500/20 border border-green-500/30 text-green-400 rounded-lg hover:bg-green-500/30 transition-all text-sm font-bold"
+                                                        >
+                                                            {copiedIndex === 'all' ? <CheckCircle size={16} /> : <Copy size={16} />}
+                                                            {copiedIndex === 'all' ? 'Copied!' : 'Copy All'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setTestResult(null)}
+                                                            className="flex items-center gap-1 px-3 py-2 bg-white/5 border border-white/10 text-white/60 rounded-lg hover:bg-white/10 hover:text-white transition-all text-sm"
+                                                            title="ปิดผลลัพธ์"
+                                                        >
+                                                            <X size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Prompts List */}
+                                                <div className="space-y-3">
+                                                    <h4 className="text-sm font-bold text-purple-300 uppercase tracking-wider flex items-center gap-2">
+                                                        <FileText size={14} /> Generated Prompts
+                                                    </h4>
+                                                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                                                        {testResult.prompts?.map((prompt, idx) => (
+                                                            <div key={idx} className="group bg-black/40 border border-white/10 rounded-xl p-4 hover:border-purple-500/30 transition-all">
+                                                                <div className="flex items-start justify-between gap-4">
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center gap-2 mb-2">
+                                                                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-xs font-bold rounded">Scene {idx + 1}</span>
+                                                                            {prompt.audioDescription && (
+                                                                                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded">🔊 Audio</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-white/80 text-sm leading-relaxed">{prompt.englishPrompt}</p>
+                                                                        {prompt.audioDescription && (
+                                                                            <p className="text-blue-300/60 text-xs mt-2">🎵 {prompt.audioDescription}</p>
+                                                                        )}
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleCopyPrompt(prompt.englishPrompt, idx)}
+                                                                        className="shrink-0 p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-purple-500/20 hover:border-purple-500/30 transition-all opacity-0 group-hover:opacity-100"
+                                                                        title="Copy Prompt"
+                                                                    >
+                                                                        {copiedIndex === idx ? <CheckCircle size={16} className="text-green-400" /> : <Copy size={16} className="text-white/60" />}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Titles & Tags Section */}
+                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                    {/* Titles */}
+                                                    <div className="bg-black/30 border border-white/10 rounded-xl p-4">
+                                                        <h4 className="text-sm font-bold text-orange-300 uppercase tracking-wider flex items-center gap-2 mb-3">
+                                                            <FileText size={14} /> Titles
+                                                        </h4>
+                                                        <div className="space-y-2">
+                                                            {testResult.titles && Object.entries(testResult.titles).map(([platform, title]) => (
+                                                                <div key={platform} className="flex items-center justify-between gap-2 bg-white/5 rounded-lg p-2">
+                                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${
+                                                                            platform === 'tiktok' ? 'bg-pink-500/20 text-pink-300' :
+                                                                            platform === 'facebook' ? 'bg-blue-500/20 text-blue-300' :
+                                                                            platform === 'instagram' ? 'bg-purple-500/20 text-purple-300' :
+                                                                            'bg-red-500/20 text-red-300'
+                                                                        }`}>{platform}</span>
+                                                                        <span className="text-white/70 text-xs truncate">{title}</span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleCopyPrompt(title, `title-${platform}`)}
+                                                                        className="p-1.5 hover:bg-white/10 rounded transition-all"
+                                                                    >
+                                                                        {copiedIndex === `title-${platform}` ? <CheckCircle size={12} className="text-green-400" /> : <Copy size={12} className="text-white/40" />}
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Tags */}
+                                                    <div className="bg-black/30 border border-white/10 rounded-xl p-4">
+                                                        <h4 className="text-sm font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2 mb-3">
+                                                            <Hash size={14} /> Tags
+                                                        </h4>
+                                                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                                            {testResult.tags && Object.entries(testResult.tags).map(([platform, tags]) => (
+                                                                <div key={platform} className="bg-white/5 rounded-lg p-2">
+                                                                    <div className="flex items-center justify-between mb-2">
+                                                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${
+                                                                            platform === 'tiktok' ? 'bg-pink-500/20 text-pink-300' :
+                                                                            platform === 'facebook' ? 'bg-blue-500/20 text-blue-300' :
+                                                                            platform === 'instagram' ? 'bg-purple-500/20 text-purple-300' :
+                                                                            'bg-red-500/20 text-red-300'
+                                                                        }`}>{platform} ({tags?.length || 0})</span>
+                                                                        <button
+                                                                            onClick={() => handleCopyPrompt(tags?.map(t => `#${t}`).join(' ') || '', `tags-${platform}`)}
+                                                                            className="p-1 hover:bg-white/10 rounded transition-all"
+                                                                        >
+                                                                            {copiedIndex === `tags-${platform}` ? <CheckCircle size={12} className="text-green-400" /> : <Copy size={12} className="text-white/40" />}
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {tags?.slice(0, 10).map((tag, i) => (
+                                                                            <span key={i} className="px-1.5 py-0.5 bg-cyan-500/10 text-cyan-300/70 text-[10px] rounded">#{tag}</span>
+                                                                        ))}
+                                                                        {tags?.length > 10 && (
+                                                                            <span className="px-1.5 py-0.5 text-white/40 text-[10px]">+{tags.length - 10} more</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Previous Test Info (from Firestore) - Clickable to load */}
+                                        {selectedProject.lastPromptTest && !testResult && (
+                                            <div 
+                                                onClick={() => setTestResult(selectedProject.lastPromptTest)}
+                                                className="bg-white/5 border border-white/10 rounded-xl p-4 cursor-pointer hover:bg-white/10 hover:border-purple-500/30 transition-all group"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 text-gray-400 text-sm">
+                                                        <Clock size={14} />
+                                                        <span>Last Test: {selectedProject.lastPromptTest.testedAt?.toDate?.()?.toLocaleString() || 'Unknown'}</span>
+                                                        <span className="text-purple-400">({selectedProject.lastPromptTest.sceneCount} scenes)</span>
+                                                    </div>
+                                                    <span className="text-purple-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        👆 คลิกเพื่อดูผลลัพธ์
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
