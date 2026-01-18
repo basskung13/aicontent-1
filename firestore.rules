@@ -1,0 +1,135 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- Helper Functions ---
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function hasActiveSubscription() {
+      return isAuthenticated() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'active';
+    }
+
+    // --- Schema Validation Helpers ---
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['email', 'displayName', 'role', 'subscription', 'language', 'createdAt']) &&
+             data.email is string &&
+             data.displayName is string &&
+             (data.role == 'user' || data.role == 'admin') &&
+             data.subscription.keys().hasAll(['plan', 'status']) &&
+             (data.language == 'th' || data.language == 'en' || data.language == 'zh');
+    }
+
+    function isValidAccount() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['platform', 'accountName', 'status']) &&
+             (data.platform == 'youtube' || data.platform == 'facebook' || data.platform == 'tiktok' || data.platform == 'instagram') &&
+             data.accountName is string &&
+             (data.status == 'active' || data.status == 'suspended');
+    }
+
+    function isValidProject() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'concept', 'scenes', 'aspect', 'modeType', 'status']) &&
+             data.name is string &&
+             data.scenes is number && data.scenes >= 1 && data.scenes <= 10 &&
+             (data.aspect == '9:16' || data.aspect == '16:9' || data.aspect == '1:1') &&
+             (data.modeType == 'system' || data.modeType == 'custom' || data.modeType == 'marketplace') &&
+             (data.status == 'active' || data.status == 'paused');
+    }
+
+    // --- Collection Rules ---
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
+      
+      // User sub-collections (owner + admin can write)
+      match /{subcollection}/{docId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      // Projects and nested subcollections (slots, logs, episodes)
+      match /projects/{projectId}/{nestedCollection}/{docId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+    
+    // Time slots
+    match /timeslots/{date}/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId);
+    }
+    
+    // Logs (admin write, user read own)
+    match /logs/{logId} {
+      allow read: if isAdmin() || resource.data.userId == request.auth.uid;
+      allow write: if isAdmin();
+    }
+    
+    // Marketplace Modes
+    match /marketplaceModes/{modeId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
+    }
+
+    // Marketplace Expanders (public read)
+    match /marketplace_expanders/{expanderId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.sellerId == request.auth.uid;
+    }
+
+    // Marketplace (alias)
+    match /marketplace/{expanderId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.sellerId == request.auth.uid;
+    }
+
+    // Characters (public read)
+    match /characters/{charId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
+    }
+
+    // Payment Requests (User สร้างได้, Admin อ่าน/อัปเดตได้)
+    match /payment_requests/{requestId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Payment Logs (Admin เท่านั้น)
+    match /payment_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 🟢 EXTENSION: Root Projects & Recipes (for Content Auto Post Agent)
+    match /projects/{projectId} {
+       allow read, write: if true; // Allow Anonymous Agent
+       
+       match /recipes/{recipeId} {
+         allow read, write: if true;
+       }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+2026/01/13-00:05:22.827 2fa4 Reusing MANIFEST C:\content-auto-post\desktop-agent\profiles\TEMP_DEBUG_PROFILE\Default\IndexedDB\https_labs.google_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/13-00:05:22.832 2fa4 Recovering log #26
+2026/01/13-00:05:22.869 2fa4 Reusing old log C:\content-auto-post\desktop-agent\profiles\TEMP_DEBUG_PROFILE\Default\IndexedDB\https_labs.google_0.indexeddb.leveldb/000026.log 
+2026/01/13-00:05:22.871 2fa4 Delete type=2 #24
+2026/01/13-00:05:23.352 11a4 Level-0 table #31: started
+2026/01/13-00:05:23.421 11a4 Level-0 table #31: 1180 bytes OK
+2026/01/13-00:05:23.424 11a4 Delete type=0 #26
+2026/01/13-00:05:23.425 4cd8 Manual compaction at level-0 from '\x00\x0b\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x0c\x00\x00\x00' @ 0 : 0; will stop at '\x00\x0b\x00\x00\x05' @ 620 : 1
+2026/01/13-00:05:23.425 4cd8 Compacting 1@0 + 1@1 files
+2026/01/13-00:05:23.449 4cd8 Generated table #32@0: 154 keys, 3488 bytes
+2026/01/13-00:05:23.449 4cd8 Compacted 1@0 + 1@1 files => 3488 bytes
+2026/01/13-00:05:23.450 4cd8 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/01/13-00:05:23.451 4cd8 Delete type=2 #31
+2026/01/13-00:05:23.452 4cd8 Manual compaction at level-0 from '\x00\x0b\x00\x00\x05' @ 620 : 1 .. '\x00\x0c\x00\x00\x00' @ 0 : 0; will stop at (end)

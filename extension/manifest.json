@@ -1,0 +1,41 @@
+{
+    "manifest_version": 3,
+    "name": "Content Auto Post Agent",
+    "version": "1.0.0",
+    "action": {
+        "default_title": "Open Recorder"
+    },
+    "side_panel": {
+        "default_path": "index.html"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "src/content/recorder.js",
+                "src/content/player.js"
+            ],
+            "run_at": "document_end"
+        }
+    ],
+    "background": {
+        "service_worker": "src/background/index.js",
+        "type": "module"
+    },
+    "permissions": [
+        "sidePanel",
+        "activeTab",
+        "storage",
+        "alarms",
+        "downloads",
+        "scripting"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net"
+    }
+}

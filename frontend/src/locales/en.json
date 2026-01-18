@@ -1,0 +1,39 @@
+{
+    "common": {
+        "dashboard": "Dashboard",
+        "projects": "Projects",
+        "settings": "Settings",
+        "login": "Login",
+        "logout": "Logout"
+    },
+    "dashboard": {
+        "welcome": "Welcome back",
+        "active_projects": "Active Projects",
+        "todays_posts": "Today's Posts"
+    },
+    "days": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+    },
+    "timeslot": {
+        "title": "Posting Schedule",
+        "add_slot": "Add Slot",
+        "start_time": "Start",
+        "end_time": "End",
+        "duration": "Duration",
+        "scenes": "Scenes (1-10)",
+        "platforms": "Platforms (1-4)",
+        "calculated_end": "Est. End",
+        "overlap_error": "Time slot overlap detected!",
+        "saving": "Saving...",
+        "saved": "Saved",
+        "login_required": "Please login to save",
+        "no_slots": "No slots added for this day",
+        "remove": "Remove"
+    }
+}
