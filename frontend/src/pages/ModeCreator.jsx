@@ -858,24 +858,23 @@ ${sceneText}
 
     return (
         <div className="min-h-screen p-8 space-y-6 overflow-auto">
-            {/* Header Toolbar */}
+            {/* Header Toolbar - Unified Style */}
             <div className="relative flex items-center justify-between border-white/10 transition-all duration-300 z-50 overflow-hidden bg-white/5 backdrop-blur-xl border p-4 rounded-2xl shadow-xl">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
                     <div className="flex items-center gap-4">
                         <div className="relative group">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/30 animate-pulse group-hover:scale-110 transition-transform duration-300">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
                                 <Sparkles className="text-white group-hover:rotate-12 transition-transform duration-300" size={32} />
                             </div>
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
                             <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
                         </div>
                         <div>
-                            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-100 to-pink-200 drop-shadow-2xl tracking-tight flex items-center gap-3">
+                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight flex items-center gap-3">
                                 {modeData.name}
                                 {isSaving && <span className="text-xs text-green-400 font-normal flex items-center gap-1 bg-green-500/20 px-2 py-1 rounded-full"><Loader2 size={12} className="animate-spin" /> Saving...</span>}
                             </h1>
-                            <p className="text-lg text-purple-200/60 font-light flex items-center gap-2 mt-1">
-                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
                                 Mode Creator Engine
                             </p>
                         </div>
@@ -901,7 +900,7 @@ ${sceneText}
                         <button
                             onClick={handleSaveMode}
                             disabled={isSaving}
-                            className="group relative flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:via-blue-400 hover:to-cyan-400 text-white rounded-2xl transition-all duration-300 shadow-xl shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed font-bold hover:scale-105 overflow-hidden"
+                            className="group relative flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 text-white rounded-2xl transition-all duration-300 shadow-lg shadow-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-bold hover:scale-105 overflow-hidden"
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
                             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} className="relative z-10 group-hover:scale-110 group-hover:rotate-12 transition-all" />}

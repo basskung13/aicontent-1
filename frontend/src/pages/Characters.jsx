@@ -654,24 +654,23 @@ const Characters = () => {
   // List View
   return (
     <div className="p-6">
-      {/* Header */}
+      {/* Header - Unified Style */}
       <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden mb-8">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500" />
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative group">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30 animate-pulse group-hover:scale-110 transition-transform duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
                 <Users className="text-white group-hover:rotate-12 transition-transform duration-300" size={32} />
               </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
                 <span className="text-[8px] font-bold text-black">{characters.length}</span>
               </div>
             </div>
             <div>
-              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-blue-300 drop-shadow-2xl tracking-tight">Characters Library</h1>
-              <p className="text-lg text-purple-200/60 font-light flex items-center gap-2 mt-1">
-                <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">Characters Library</h1>
+              <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
                 สร้างและจัดการตัวละครสำหรับใช้ใน Mode
               </p>
             </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, FolderKanban, Settings, LogIn, LogOut, User, Share2, Wand2, ShoppingBag, Shield, Users, Sparkles, Coins, Video, ChevronDown, Mic, Music } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Settings, LogIn, LogOut, User, Share2, Wand2, ShoppingBag, Shield, Users, Sparkles, Coins, Video, ChevronDown, Mic, Music, Clock } from 'lucide-react';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -49,11 +49,10 @@ function NavItem({ to, icon: Icon, label }) {
   );
 }
 
-// VDO Creator Dropdown Menu
-function NavItemDropdown({ icon: Icon, label, children }) {
+// Dropdown Menu Component
+function NavItemDropdown({ icon: Icon, label, children, childPaths = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const childPaths = ['/projects', '/mode-creator', '/expander', '/characters'];
   const isChildActive = childPaths.includes(location.pathname);
 
   return (
@@ -199,22 +198,24 @@ return (
         <NavItem to="/" icon={LayoutDashboard} label={t('common.dashboard')} />
         
         {/* VDO Creator Dropdown */}
-        <NavItemDropdown icon={Video} label="VDO Creator">
+        <NavItemDropdown icon={Video} label="VDO Creator" childPaths={['/projects', '/mode-creator', '/expander', '/characters']}>
           <SubNavItem to="/projects" icon={FolderKanban} label="Projects" />
           <SubNavItem to="/mode-creator" icon={Wand2} label="Mode System" />
           <SubNavItem to="/expander" icon={Sparkles} label="Expander" />
           <SubNavItem to="/characters" icon={Users} label="Characters" />
         </NavItemDropdown>
         
-        {/* Podcast & Music Creator (Coming Soon) */}
-        <NavItem to="/podcast-creator" icon={Mic} label="Podcast Creator" />
-        <NavItem to="/music-creator" icon={Music} label="Music Creator" />
-        
         <NavItem to="/marketplace" icon={ShoppingBag} label="Marketplace" />
-        <NavItem to="/payments" icon={Coins} label="Payments" />
         <NavItem to="/platforms" icon={Share2} label={t('common.platforms', 'Platforms')} />
+        <NavItem to="/payments" icon={Coins} label="Payments" />
         {isAdmin && <NavItem to="/admin" icon={Shield} label="Admin Panel" />}
         <NavItem to="/settings" icon={Settings} label={t('common.settings')} />
+        
+        {/* Coming Soon Dropdown */}
+        <NavItemDropdown icon={Clock} label="Coming Soon" childPaths={['/podcast-creator', '/music-creator']}>
+          <SubNavItem to="/podcast-creator" icon={Mic} label="Podcast Creator" />
+          <SubNavItem to="/music-creator" icon={Music} label="Music Creator" />
+        </NavItemDropdown>
       </nav>
     </aside>
 

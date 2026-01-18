@@ -297,45 +297,44 @@ const Payments = () => {
 
     return (
         <div className="min-h-screen flex flex-col p-8 gap-6 bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 text-white font-sans overflow-hidden relative">
-            {/* Animated Background Effects */}
+            {/* Subtle Background */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/20 rounded-full blur-3xl animate-pulse" />
-                <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-                <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/20 via-transparent to-transparent" />
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/10 rounded-full blur-3xl" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent" />
             </div>
 
-            {/* Header + Wallet */}
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg shadow-purple-500/30 animate-pulse">
-                            <Wallet className="text-white" size={32} />
+            {/* Header + Wallet - Unified Style */}
+            <div className="relative z-10 bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                    <div className="flex items-center gap-4">
+                        <div className="relative group">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
+                                <Wallet className="text-white" size={32} />
+                            </div>
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
                         </div>
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
+                        <div>
+                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
+                                กระเป๋าเงิน
+                            </h1>
+                            <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
+                                จัดการเครดิตของคุณ - เติมเงินและถอนเงิน
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-red-300 drop-shadow-2xl tracking-tight">
-                            กระเป๋าเงิน
-                        </h1>
-                        <p className="text-lg text-red-200/60 font-light flex items-center gap-2 mt-1">
-                            <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            จัดการเครดิตของคุณ - เติมเงินและถอนเงิน
-                        </p>
-                    </div>
-                </div>
-                <div className="group relative bg-gradient-to-br from-purple-600/30 to-purple-900/30 backdrop-blur-xl rounded-3xl border border-purple-500/30 p-5 flex items-center gap-5 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-500 cursor-pointer overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-purple-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/30 group-hover:animate-bounce">
-                        <Wallet className="text-white" size={32} />
-                    </div>
-                    <div>
-                        <p className="text-purple-300 text-sm font-medium uppercase tracking-wider">เครดิตคงเหลือ</p>
-                        <p className="text-4xl font-black text-white tracking-tight">
-                            {loadingWallet ? <Loader2 size={28} className="animate-spin" /> : walletBalance.toLocaleString()}
-                            <span className="text-lg font-medium text-purple-300 ml-2">TOKEN</span>
-                        </p>
+                    <div className="group relative bg-gradient-to-br from-orange-600/20 to-red-900/20 backdrop-blur-xl rounded-2xl border border-orange-500/30 p-5 flex items-center gap-5 hover:scale-105 transition-all duration-300 cursor-pointer overflow-hidden">
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
+                            <Wallet className="text-white" size={28} />
+                        </div>
+                        <div>
+                            <p className="text-orange-300 text-sm font-medium uppercase tracking-wider">เครดิตคงเหลือ</p>
+                            <p className="text-3xl font-black text-white tracking-tight">
+                                {loadingWallet ? <Loader2 size={24} className="animate-spin" /> : walletBalance.toLocaleString()}
+                                <span className="text-base font-medium text-orange-300 ml-2">TOKEN</span>
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

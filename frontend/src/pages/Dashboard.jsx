@@ -283,49 +283,49 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen flex flex-col p-8 gap-6 bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 text-white font-sans overflow-auto relative">
-            {/* Animated Background Effects */}
+            {/* Subtle Background Effect */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/20 rounded-full blur-3xl animate-pulse" />
-                <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-                <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/20 via-transparent to-transparent" />
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/10 rounded-full blur-3xl" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent" />
             </div>
 
-            {/* Header */}
-            <div className="flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 via-purple-500 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/30 animate-pulse">
-                            <LayoutDashboard className="text-white" size={32} />
+            {/* Header - Unified Box Style */}
+            <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden z-10">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="relative group">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
+                                <LayoutDashboard className="text-white" size={32} />
+                            </div>
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
                         </div>
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
+                        <div>
+                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
+                                Dashboard
+                            </h1>
+                            <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
+                                ภาพรวมทั้งหมดในที่เดียว
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-red-300 drop-shadow-2xl tracking-tight">
-                            Dashboard
-                        </h1>
-                        <p className="text-lg text-red-200/60 font-light flex items-center gap-2 mt-1">
-                            <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            ภาพรวมทั้งหมดในที่เดียว • ออนไลน์
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="px-5 py-3 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 text-sm text-slate-300 shadow-xl hover:bg-white/10 transition-all duration-300 cursor-default">
-                        <Calendar size={16} className="inline mr-2 text-red-400" />
-                        {new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    <div className="flex items-center gap-3">
+                        <div className="px-4 py-2 bg-black/30 backdrop-blur-xl rounded-xl border border-white/10 text-sm text-slate-300">
+                            <Calendar size={16} className="inline mr-2 text-orange-400" />
+                            {new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Main Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {/* Main Stats Grid - Unified Color Scheme */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 relative z-10">
                 <StatCard 
                     icon={Wallet} 
                     label="ยอดเงินคงเหลือ" 
                     value={`${walletBalance.toLocaleString()} ฿`}
-                    color="purple"
+                    color="red"
                     loading={loading}
                 />
                 <StatCard 
@@ -333,7 +333,7 @@ export default function Dashboard() {
                     label="โปรเจคทั้งหมด" 
                     value={stats.totalProjects}
                     subValue={`${stats.activeProjects} กำลังทำงาน`}
-                    color="blue"
+                    color="red"
                     loading={loading}
                 />
                 <StatCard 
@@ -341,7 +341,7 @@ export default function Dashboard() {
                     label="แพลตฟอร์มเชื่อมต่อ" 
                     value={stats.totalAccounts}
                     subValue={`${stats.totalFollowers.toLocaleString()} ผู้ติดตาม`}
-                    color="green"
+                    color="orange"
                     loading={loading}
                 />
                 <StatCard 
@@ -357,7 +357,7 @@ export default function Dashboard() {
                     label="คิวรอโพสต์" 
                     value={stats.pendingQueue}
                     subValue={`${stats.todayPosts} โพสต์วันนี้`}
-                    color="red"
+                    color="amber"
                     loading={loading}
                 />
             </div>
@@ -365,14 +365,14 @@ export default function Dashboard() {
             {/* Charts & Activity Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
                 {/* Activity Chart */}
-                <div className="lg:col-span-2 group relative bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/10 p-6 hover:border-blue-500/30 transition-all duration-500 overflow-hidden">
-                    {/* Glow Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                <div className="lg:col-span-2 group relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6 hover:border-orange-500/30 transition-all duration-300 overflow-hidden">
+                    {/* Subtle Glow Effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-orange-500/0 via-orange-500/3 to-orange-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
                         <div>
                             <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
                                     <BarChart3 size={20} className="text-white" />
                                 </div>
                                 กิจกรรมและสถิติ
@@ -398,7 +398,7 @@ export default function Dashboard() {
                                         }}
                                         className={`group/btn relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 ${
                                             isActive
-                                                ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-500/30 scale-105'
+                                                ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-orange-500/30'
                                                 : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-white/5 hover:border-white/20'
                                         }`}
                                     >

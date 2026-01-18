@@ -870,53 +870,53 @@ const Marketplace = () => {
 
     return (
         <div className="min-h-screen flex flex-col p-8 gap-8 bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 text-white font-sans overflow-hidden">
-            {/* Decorative Background Glow */}
+            {/* Subtle Background */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
-                <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-red-600/10 rounded-full blur-[100px]"></div>
-                <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-[100px]"></div>
+                <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-red-600/5 rounded-full blur-[100px]"></div>
             </div>
 
-            {/* Header Section */}
-            <div className="flex items-end justify-between shrink-0 relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-600 flex items-center justify-center shadow-lg shadow-yellow-500/30 animate-pulse">
-                            <ShoppingBag className="text-white" size={32} />
+            {/* Header Section - Unified Style */}
+            <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden z-10">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="relative group">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
+                                <ShoppingBag className="text-white" size={32} />
+                            </div>
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
                         </div>
-                        <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center animate-bounce shadow-lg">
-                            <Sparkles size={14} className="text-black" />
+                        <div>
+                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
+                                Expander Marketplace
+                            </h1>
+                            <p className="text-base text-slate-400 font-light mt-1">ค้นหาและติดตั้ง Expander สำหรับขยาย Prompt ให้เป็น Premium Quality</p>
                         </div>
                     </div>
-                    <div>
-                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-300 to-red-300 tracking-tight">
-                            Expander Marketplace
-                        </h1>
-                        <p className="text-lg text-red-200/60 font-light mt-1">ค้นหาและติดตั้ง Expander สำหรับขยาย Prompt ให้เป็น Premium Quality</p>
-                    </div>
-                </div>
 
                 {/* Navigation Tabs */}
                 <div className="flex bg-black/40 backdrop-blur-xl p-2 rounded-2xl border border-white/10 gap-2">
                     <button
                         onClick={() => setActiveTab('browse')}
-                        className={`group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'browse'
-                                ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white shadow-lg shadow-red-500/40 scale-105'
+                        className={`group relative px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'browse'
+                                ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/40'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                             }`}
                     >
-                        <LayoutGrid size={18} className={`transition-transform duration-300 ${activeTab === 'browse' ? 'animate-bounce' : 'group-hover:rotate-12'}`} /> Browse Store
-                        {activeTab === 'browse' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
+                        <LayoutGrid size={18} className={`transition-transform duration-300 ${activeTab === 'browse' ? '' : 'group-hover:rotate-12'}`} /> Browse Store
+                        {activeTab === 'browse' && <span className="absolute inset-0 rounded-xl bg-white/10" />}
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
-                        className={`group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'history'
-                                ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white shadow-lg shadow-red-500/40 scale-105'
+                        className={`group relative px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'history'
+                                ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/40'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                             }`}
                     >
-                        <History size={18} className={`transition-transform duration-300 ${activeTab === 'history' ? 'animate-bounce' : 'group-hover:rotate-12'}`} /> My History
-                        {activeTab === 'history' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
+                        <History size={18} className={`transition-transform duration-300 ${activeTab === 'history' ? '' : 'group-hover:rotate-12'}`} /> My History
+                        {activeTab === 'history' && <span className="absolute inset-0 rounded-xl bg-white/10" />}
                     </button>
+                </div>
                 </div>
             </div>
 

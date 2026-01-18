@@ -443,32 +443,32 @@ const Admin = () => {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 text-white p-8 font-sans relative overflow-hidden">
-            {/* Animated Background Effects */}
+            {/* Subtle Background */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/20 rounded-full blur-3xl animate-pulse" />
-                <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-                <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/20 via-transparent to-transparent" />
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/10 rounded-full blur-3xl" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent" />
             </div>
 
-            {/* Header */}
+            {/* Header - Unified Style */}
             <div className="max-w-7xl mx-auto mb-8 relative">
-                <div className="flex items-center gap-4 mb-2">
-                    <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse">
-                            <BarChart3 className="text-white" size={32} />
+                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
+                    <div className="flex items-center gap-4">
+                        <div className="relative group">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
+                                <BarChart3 className="text-white" size={32} />
+                            </div>
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
                         </div>
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
-                    </div>
-                    <div>
-                        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-red-300 drop-shadow-2xl tracking-tight">
-                            Admin Command Center
-                        </h1>
-                        <p className="text-lg text-red-200/60 font-light flex items-center gap-2 mt-1">
-                            <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            ระบบจัดการการเงินและผู้ใช้งาน • ออนไลน์
-                        </p>
+                        <div>
+                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
+                                Admin Command Center
+                            </h1>
+                            <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
+                                ระบบจัดการการเงินและผู้ใช้งาน
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -486,12 +486,11 @@ const Admin = () => {
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`group relative flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
                                     isActive 
-                                        ? 'bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white shadow-lg shadow-red-500/40 scale-105' 
-                                        : 'text-slate-300 hover:bg-white/10 hover:text-white hover:scale-102'
+                                        ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/40' 
+                                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
                                 }`}
-                                style={{ animationDelay: `${index * 100}ms` }}
                             >
-                                <Icon size={20} className={`transition-transform duration-300 ${isActive ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
+                                <Icon size={20} className={`transition-transform duration-300 ${isActive ? '' : 'group-hover:rotate-12'}`} />
                                 {tab.label}
                                 {pendingCount > 0 && (
                                     <span className="bg-yellow-400 text-black text-xs font-black px-2.5 py-1 rounded-full animate-pulse shadow-lg shadow-yellow-500/50">{pendingCount}</span>

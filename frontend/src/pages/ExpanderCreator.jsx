@@ -1230,25 +1230,24 @@ const ExpanderCreator = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 p-6 relative">
             <div className="max-w-7xl mx-auto">
-                {/* Header */}
+                {/* Header - Unified Style */}
                 <div className="mb-8 relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
                     <div className="flex items-center gap-4 mb-4">
                         <div className="relative group">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-600 flex items-center justify-center shadow-lg shadow-yellow-500/30 animate-pulse group-hover:scale-110 transition-transform duration-300">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform duration-300">
                                 <Sparkles className="text-white group-hover:rotate-12 transition-transform duration-300" size={32} />
                             </div>
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-ping" />
                             <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
                                 <span className="text-[8px] font-bold text-black">{savedExpanders.length}</span>
                             </div>
                         </div>
                         <div>
-                            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-300 to-red-300 drop-shadow-2xl tracking-tight">
+                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
                                 Expander Creator
                             </h1>
-                            <p className="text-lg text-orange-200/60 font-light flex items-center gap-2 mt-1">
-                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                                <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
                                 สร้าง Expander สำหรับขยาย Prompt ให้เป็น Premium Quality
                             </p>
                         </div>
@@ -1264,11 +1263,11 @@ const ExpanderCreator = () => {
                                     : 'text-slate-300 hover:bg-white/10 hover:text-white'
                             }`}
                         >
-                            <Package size={18} className={`transition-transform duration-300 ${activeTab === 'myExpander' ? 'animate-pulse' : 'group-hover:rotate-12'}`} /> My Expander
+                            <Package size={18} className={`transition-transform duration-300 ${activeTab === 'myExpander' ? '' : 'group-hover:rotate-12'}`} /> My Expander
                             {savedExpanders.length > 0 && (
-                                <span className="bg-yellow-400 text-black px-2.5 py-0.5 rounded-full text-xs font-bold animate-pulse">{savedExpanders.length}</span>
+                                <span className="bg-amber-400 text-black px-2.5 py-0.5 rounded-full text-xs font-bold">{savedExpanders.length}</span>
                             )}
-                            {activeTab === 'myExpander' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
+                            {activeTab === 'myExpander' && <span className="absolute inset-0 rounded-xl bg-white/10" />}
                         </button>
                         <button
                             onClick={() => setActiveTab('creator')}
@@ -1278,8 +1277,8 @@ const ExpanderCreator = () => {
                                     : 'text-slate-300 hover:bg-white/10 hover:text-white'
                             }`}
                         >
-                            <Edit3 size={18} className={`transition-transform duration-300 ${activeTab === 'creator' ? 'animate-pulse' : 'group-hover:rotate-12'}`} /> Creator
-                            {activeTab === 'creator' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
+                            <Edit3 size={18} className={`transition-transform duration-300 ${activeTab === 'creator' ? '' : 'group-hover:rotate-12'}`} /> Creator
+                            {activeTab === 'creator' && <span className="absolute inset-0 rounded-xl bg-white/10" />}
                         </button>
                     </div>
                 </div>
