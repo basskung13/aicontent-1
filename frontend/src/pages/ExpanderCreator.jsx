@@ -5,6 +5,7 @@ import {
     MessageCircle, X, Paperclip, Store, Coins, Package, Eye, Edit3, Camera, Image,
     Plus, FolderPlus, MoveRight, ArrowUp, ArrowDown, Volume2, MoreVertical, Play, ExternalLink
 } from 'lucide-react';
+import GlassDropdown from '../components/ui/GlassDropdown';
 import { auth, db, functions, storage } from '../firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, setDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1722,17 +1723,12 @@ const ExpanderCreator = () => {
                                 <div>
                                     <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase tracking-wider">Category</label>
                                     <div className="glass-dropdown-wrapper w-full">
-                                        <select
+                                        <GlassDropdown
                                             value={selectedCategory}
-                                            onChange={(e) => setSelectedCategory(e.target.value)}
-                                            className="glass-dropdown w-full"
-                                        >
-                                            {CATEGORIES.map(cat => (
-                                                <option key={cat} value={cat} className="bg-slate-900 text-white">
-                                                    {cat}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={setSelectedCategory}
+                                            options={CATEGORIES.map(cat => ({ value: cat, label: cat }))}
+                                            buttonClassName="glass-dropdown w-full"
+                                        />
                                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
                                     </div>
                                 </div>
@@ -2231,15 +2227,12 @@ const ExpanderCreator = () => {
                         <div className="mb-6">
                             <label className="text-sm text-slate-300 mb-2 block">ระยะเวลาเผยแพร่ฟรี (วัน)</label>
                             <div className="glass-dropdown-wrapper w-full">
-                                <select
+                                <GlassDropdown
                                     value={freeDays}
-                                    onChange={(e) => setFreeDays(parseInt(e.target.value))}
-                                    className="glass-dropdown w-full text-center text-xl font-bold"
-                                >
-                                    {[1, 2, 3, 5, 7, 14, 30].map(days => (
-                                        <option key={days} value={days} className="bg-slate-900 text-white">{days} วัน</option>
-                                    ))}
-                                </select>
+                                    onChange={(newValue) => setFreeDays(Number(newValue))}
+                                    options={[1, 2, 3, 5, 7, 14, 30].map(days => ({ value: days, label: `${days} วัน` }))}
+                                    buttonClassName="glass-dropdown w-full text-center text-xl font-bold"
+                                />
                             </div>
                             <p className="text-xs text-slate-500 mt-2">
                                 ผู้ใช้อื่นสามารถรับ Expander นี้ไปใช้ฟรีได้ {freeDays} วัน หลังจากนั้นจะหายไปจาก Marketplace

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Upload, Image as ImageIcon, Loader2, CheckCircle, Clock, XCircle, Wallet, ArrowUpRight, ArrowDownRight, Building2, Plus, Trash2, CreditCard } from 'lucide-react';
+import GlassDropdown from '../components/ui/GlassDropdown';
 import { auth, db, storage } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp, where, doc, getDoc, deleteDoc } from 'firebase/firestore';
@@ -649,16 +650,15 @@ const Payments = () => {
                             <div>
                                 <label className="text-sm text-slate-300 mb-2 block">ธนาคาร</label>
                                 <div className="glass-dropdown-wrapper w-full">
-                                    <select
+                                    <GlassDropdown
                                         value={newBank.bankCode}
-                                        onChange={(e) => setNewBank(prev => ({ ...prev, bankCode: e.target.value }))}
-                                        className="glass-dropdown w-full"
-                                    >
-                                        <option value="">-- เลือกธนาคาร --</option>
-                                        {THAI_BANKS.map(bank => (
-                                            <option key={bank.code} value={bank.code}>{bank.name}</option>
-                                        ))}
-                                    </select>
+                                        onChange={(newValue) => setNewBank(prev => ({ ...prev, bankCode: newValue }))}
+                                        options={[
+                                            { value: '', label: '-- เลือกธนาคาร --' },
+                                            ...THAI_BANKS.map(bank => ({ value: bank.code, label: bank.name }))
+                                        ]}
+                                        buttonClassName="glass-dropdown w-full"
+                                    />
                                 </div>
                             </div>
                             <div>

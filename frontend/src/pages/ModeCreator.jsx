@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Settings, Save, Play, Layers, Box, Type, Plus, Trash2, Pencil, Film, Mic, Camera, ChevronDown, ChevronUp, GripVertical, Loader2, ChevronsDownUp, Sparkles, ChevronLeft, ChevronRight, RotateCcw, RotateCw, Pause, Copy, Check, Eye, Search } from 'lucide-react';
 import CinematicStep from '../components/CinematicStep';
 import ModeConsultant from '../components/ModeConsultant';
+import GlassDropdown from '../components/ui/GlassDropdown';
 import { db, auth, storage, functions } from '../firebase';
 import { doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1099,13 +1100,11 @@ ${sceneText}
                                         <div>
                                             <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase tracking-wider">Category</label>
                                             <div className="glass-dropdown-wrapper w-full">
-                                                <select
+                                                <GlassDropdown
                                                     value={modeData.category || "Cinematic / Movie"}
-                                                    onChange={(e) => setModeData({ ...modeData, category: e.target.value })}
+                                                    onChange={(newCategory) => setModeData({ ...modeData, category: newCategory })}
                                                     disabled={!isEditorActive}
-                                                    className="glass-dropdown w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    {[
+                                                    options={[
                                                         "Cinematic / Movie",
                                                         "Short Film / Story",
                                                         "Product Showcase / Commercial",
@@ -1115,12 +1114,9 @@ ${sceneText}
                                                         "Documentary / News",
                                                         "How-to / Tutorial",
                                                         "Relaxation / Lo-fi / ASMR"
-                                                    ].map(cat => (
-                                                        <option key={cat} value={cat} className="bg-slate-900 text-white">
-                                                            {cat}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    ].map(cat => ({ value: cat, label: cat }))}
+                                                    buttonClassName="glass-dropdown w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                                                />
                                                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
                                             </div>
                                         </div>
@@ -1170,20 +1166,21 @@ ${sceneText}
                                                     <div className="flex-1">
                                                         <label className="text-xs text-gray-400 mb-1 block">Tone (บรรยากาศ)</label>
                                                         <div className="glass-dropdown-wrapper w-full">
-                                                            <select
-                                                                className="glass-dropdown w-full disabled:opacity-50"
+                                                            <GlassDropdown
                                                                 value={modeData.storyOverview?.tone || 'epic'}
-                                                                onChange={(e) => handleUpdateStoryOverview('tone', e.target.value)}
+                                                                onChange={(newTone) => handleUpdateStoryOverview('tone', newTone)}
                                                                 disabled={!isEditorActive}
-                                                            >
-                                                                <option value="epic" className="bg-slate-900 text-white">🎬 Epic (ยิ่งใหญ่)</option>
-                                                                <option value="dark" className="bg-slate-900 text-white">🌑 Dark (มืดหม่น)</option>
-                                                                <option value="romantic" className="bg-slate-900 text-white">💕 Romantic (โรแมนติก)</option>
-                                                                <option value="comedy" className="bg-slate-900 text-white">😄 Comedy (ตลก)</option>
-                                                                <option value="horror" className="bg-slate-900 text-white">👻 Horror (สยองขวัญ)</option>
-                                                                <option value="action" className="bg-slate-900 text-white">💥 Action (แอ็คชั่น)</option>
-                                                                <option value="drama" className="bg-slate-900 text-white">🎭 Drama (ดราม่า)</option>
-                                                            </select>
+                                                                options={[
+                                                                    { value: 'epic', label: '🎬 Epic (ยิ่งใหญ่)' },
+                                                                    { value: 'dark', label: '🌑 Dark (มืดหม่น)' },
+                                                                    { value: 'romantic', label: '💕 Romantic (โรแมนติก)' },
+                                                                    { value: 'comedy', label: '😄 Comedy (ตลก)' },
+                                                                    { value: 'horror', label: '👻 Horror (สยองขวัญ)' },
+                                                                    { value: 'action', label: '💥 Action (แอ็คชั่น)' },
+                                                                    { value: 'drama', label: '🎭 Drama (ดราม่า)' }
+                                                                ]}
+                                                                buttonClassName="glass-dropdown w-full disabled:opacity-50"
+                                                            />
                                                         </div>
                                                     </div>
                                                     <div className="w-1/3">
@@ -1642,29 +1639,30 @@ ${sceneText}
                                 </div>
                                 {/* Role Dropdown */}
                                 <div className="glass-dropdown-wrapper">
-                                    <select
+                                    <GlassDropdown
                                         value={libRoleFilter}
-                                        onChange={(e) => setLibRoleFilter(e.target.value)}
-                                        className="glass-dropdown"
-                                    >
-                                        <option value="all" className="bg-slate-900 text-white">👤 บทบาท</option>
-                                        <option value="main" className="bg-slate-900 text-white">⭐ ตัวเอก</option>
-                                        <option value="villain" className="bg-slate-900 text-white">😈 ตัวร้าย</option>
-                                        <option value="supporting" className="bg-slate-900 text-white">👤 ตัวประกอบ</option>
-                                    </select>
+                                        onChange={setLibRoleFilter}
+                                        options={[
+                                            { value: 'all', label: '👤 บทบาท' },
+                                            { value: 'main', label: '⭐ ตัวเอก' },
+                                            { value: 'villain', label: '😈 ตัวร้าย' },
+                                            { value: 'supporting', label: '👤 ตัวประกอบ' }
+                                        ]}
+                                        buttonClassName="glass-dropdown"
+                                    />
                                 </div>
                                 {/* Tag Dropdown */}
                                 <div className="glass-dropdown-wrapper">
-                                    <select
+                                    <GlassDropdown
                                         value={libTagFilter}
-                                        onChange={(e) => setLibTagFilter(e.target.value)}
-                                        className="glass-dropdown"
-                                    >
-                                        <option value="" className="bg-slate-900 text-white">🏷️ ทุก Tag</option>
-                                        {[...new Set(libraryCharacters.flatMap(c => c.tags || []))].map(tag => (
-                                            <option key={tag} value={tag} className="bg-slate-900 text-white">{tag}</option>
-                                        ))}
-                                    </select>
+                                        onChange={setLibTagFilter}
+                                        placeholder="🏷️ ทุก Tag"
+                                        options={[
+                                            { value: '', label: '🏷️ ทุก Tag' },
+                                            ...[...new Set(libraryCharacters.flatMap(c => c.tags || []))].map(tag => ({ value: tag, label: tag }))
+                                        ]}
+                                        buttonClassName="glass-dropdown"
+                                    />
                                 </div>
                             </div>
                             {/* Role Filter Tabs */}

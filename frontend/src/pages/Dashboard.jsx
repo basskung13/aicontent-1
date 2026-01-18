@@ -6,6 +6,7 @@ import {
     ShoppingBag, Gift, DollarSign, Activity, BarChart3, PieChart, Calendar,
     CheckCircle, AlertCircle, Zap, Target, Award, Sparkles, CalendarDays, CalendarRange
 } from 'lucide-react';
+import GlassDropdown from '../components/ui/GlassDropdown';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { db, auth } from '../firebase';
@@ -616,17 +617,18 @@ export default function Dashboard() {
                         
                         {/* Platform Filter */}
                         <div className="relative">
-                            <select
+                            <GlassDropdown
                                 value={platformFilter}
-                                onChange={(e) => setPlatformFilter(e.target.value)}
-                                className="appearance-none pl-4 pr-10 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-green-500 cursor-pointer"
-                            >
-                                <option value="all" className="bg-slate-800">ทุกแพลตฟอร์ม</option>
-                                <option value="facebook" className="bg-slate-800">Facebook</option>
-                                <option value="instagram" className="bg-slate-800">Instagram</option>
-                                <option value="youtube" className="bg-slate-800">YouTube</option>
-                                <option value="tiktok" className="bg-slate-800">TikTok</option>
-                            </select>
+                                onChange={setPlatformFilter}
+                                options={[
+                                    { value: 'all', label: 'ทุกแพลตฟอร์ม' },
+                                    { value: 'facebook', label: 'Facebook' },
+                                    { value: 'instagram', label: 'Instagram' },
+                                    { value: 'youtube', label: 'YouTube' },
+                                    { value: 'tiktok', label: 'TikTok' }
+                                ]}
+                                buttonClassName="appearance-none pl-4 pr-10 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-green-500 cursor-pointer"
+                            />
                             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
                     </div>
