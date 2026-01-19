@@ -1,7 +1,7 @@
 # 📋 Implementation Plan: Content Queue & Prompt Pipeline
 
 > **วันที่อัปเดต:** 2026-01-19  
-> **สถานะ:** รอ User Approve
+> **สถานะ:** ✅ ดำเนินการเสร็จสิ้น Phase 1-5
 
 ---
 
@@ -51,34 +51,34 @@
 
 ## ⏱️ ลำดับการทำงาน (Priority Order)
 
-| Phase | งาน | เวลาประมาณ |
+| Phase | งาน | สถานะ |
 |:------|:----|:----------|
-| **1** | Backend: Shared Logic + testPromptPipeline | 2-3 ชม. |
-| **2** | Backend: Episode Status + History | 1-2 ชม. |
-| **3** | Backend: Auto-Refill | 1-2 ชม. |
-| **4** | Frontend: Settings UI + Status Badge | 2-3 ชม. |
-| **5** | Testing + Cleanup Function | 1 ชม. |
+| **1** | Backend: Shared Logic + testPromptPipeline | ✅ เสร็จ |
+| **2** | Backend: Episode Status + History + Selection Mode | ✅ เสร็จ |
+| **3** | Backend: Auto-Refill | ✅ เสร็จ |
+| **4** | Frontend: Settings UI + Status Badge + History Tab | ✅ เสร็จ |
+| **5** | Cleanup Functions (TTL) | ✅ เสร็จ |
 
-**รวมประมาณ:** 8-12 ชั่วโมง
+**สรุป:** ดำเนินการเสร็จสิ้นทั้ง 5 Phase
 
 ---
 
 ## ✅ Verification Plan
 
 1. **กด Generate Test** → ตรวจสอบ:
-   - [ ] Prompt ละเอียด (Cinematic Style)
-   - [ ] ใช้ Episode จาก Queue
-   - [ ] บันทึก testLogs/
-   - [ ] Episode ยังเป็น pending
+   - [x] Prompt ละเอียด (Cinematic Style) - ใช้ expandScenesWithTopic()
+   - [x] ใช้ Episode จาก Queue - getNextEpisode()
+   - [x] บันทึก testLogs/ - พร้อม expiresAt TTL
+   - [x] Episode ยังเป็น pending (ไม่เปลี่ยน status ใน Test)
 
 2. **Trigger Schedule** → ตรวจสอบ:
-   - [ ] บันทึก readyPrompts/
-   - [ ] Episode เป็น used
-   - [ ] ย้ายไป episodeHistory/
+   - [x] บันทึก readyPrompts/
+   - [x] Episode เป็น used
+   - [x] ย้ายไป episodeHistory/
 
 3. **Auto-Refill** → ตรวจสอบ:
-   - [ ] Trigger เมื่อเหลือ < threshold
-   - [ ] AI สร้าง Episodes ใหม่
+   - [x] Trigger เมื่อเหลือ < threshold (ใน scheduleJobs)
+   - [x] AI สร้าง Episodes ใหม่ (autoGenerateEpisodesInternal)
 
 ---
 

@@ -539,6 +539,12 @@ async function expandScenesWithTopic(params) {
   for (let i = 0; i < rawScenes.length; i++) {
     const scene = rawScenes[i];
     const scenePrompt = scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${i + 1}`;
+    const sceneInstruction = scene.sceneInstruction || '';
+
+    // Build scene instruction context if available
+    const sceneInstructionContext = sceneInstruction
+      ? `\n\n=== SCENE INSTRUCTION (IMPORTANT - Follow this direction) ===\n${sceneInstruction}`
+      : '';
 
     const systemPrompt = `You are a Premium Prompt Expander for AI video generation (Google Flow / Veo).
 
@@ -546,6 +552,7 @@ async function expandScenesWithTopic(params) {
 ${blockInstructions}
 ${episodeContext}
 ${characterContext}
+${sceneInstructionContext}
 
 === MODE CONTEXT ===
 Category: ${modeCategory || 'Cinematic'}
@@ -556,14 +563,15 @@ System Instruction: ${systemInstruction || 'Create immersive video content'}
 2. Include: character appearances (if any), lighting, camera angles, ambient sounds, emotions
 3. Be cinematic and immersive
 4. The scene MUST be about "${episodeTopic || 'the main topic'}"
-5. Output ONLY the expanded prompt, no explanations or markdown`;
+${sceneInstruction ? '5. FOLLOW the Scene Instruction above as the primary direction for this scene' : ''}
+6. Output ONLY the expanded prompt, no explanations or markdown`;
 
     try {
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Scene ${i + 1} of ${rawScenes.length}: ${scenePrompt}` }
+          { role: 'user', content: `Scene ${i + 1} of ${rawScenes.length}: ${scenePrompt}${sceneInstruction ? `\n\nScene Direction: ${sceneInstruction}` : ''}` }
         ],
         temperature: 0.7,
         max_tokens: 800
@@ -704,6 +712,7 @@ function extractRawScenesFromMode(modeData) {
           blockTitle: block.title || `Scene ${blockIndex + 1}`,
           visualPrompt: step.rawPrompt || block.title || '',
           rawPrompt: step.rawPrompt || '',
+          sceneInstruction: step.sceneInstruction || '',
           audioAmbience: step.audioInstruction || '',
           audioInstruction: step.audioInstruction || '',
           cameraAngle: step.cameraAngle || 'wide',
@@ -730,15 +739,52 @@ function extractRawScenesFromMode(modeData) {
   return rawScenes;
 }
 
+// ============================================
+// SHARED HELPER: Get Next Episode from Queue
+// Supports: sequential (order asc) or random selection
+// ============================================
+async function getNextEpisode(projectRef, selectionMode = 'sequential') {
+  const episodesRef = projectRef.collection('episodes');
+  
+  // Query only pending episodes
+  let query = episodesRef.where('status', '==', 'pending');
+
+  if (selectionMode === 'random') {
+    // Random: fetch all pending then pick one randomly
+    const snapshot = await query.get();
+    if (snapshot.empty) return null;
+
+    const randomIndex = Math.floor(Math.random() * snapshot.size);
+    const doc = snapshot.docs[randomIndex];
+    return { id: doc.id, ref: doc.ref, ...doc.data() };
+  } else {
+    // Sequential: order by 'order' field ascending, get first
+    query = query.orderBy('order', 'asc').limit(1);
+    const snapshot = await query.get();
+    if (snapshot.empty) return null;
+
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ref: doc.ref, ...doc.data() };
+  }
+}
+
+// ============================================
+// SHARED HELPER: Get Remaining Episode Count
+// ============================================
+async function getRemainingEpisodeCount(projectRef) {
+  const snapshot = await projectRef.collection('episodes')
+    .where('status', '==', 'pending')
+    .get();
+  return snapshot.size;
+}
+
 exports.consultantChat = functions.https.onCall(async (data, context) => {
   try {
     const openai = getOpenAI();
-    const { message, history, currentModeData } = data;
+    const { message, history, currentModeData, aiMode = 'architect' } = data;
 
-    const fullHistory = [
-      {
-        role: 'system',
-        content: `You are "AI Mode Architect" - ผู้ช่วยออกแบบโครงสร้าง Mode 🎬
+    // System prompt for Architect Mode (สร้างโครงเรื่อง)
+    const architectSystemPrompt = `You are "AI Mode Architect" - ผู้ช่วยออกแบบโครงสร้าง Mode 🎬
 
 [🎯 CORE MISSION]
 ช่วย User ออกแบบ "โครงสร้างฉาก" สำหรับวิดีโอ
@@ -822,9 +868,65 @@ exports.consultantChat = functions.https.onCall(async (data, context) => {
 - ตอบกลับเสมอ ห้ามเงียบ
 - ถามทีละคำถาม ไม่ถามหลายอย่างพร้อมกัน
 - ใช้ options เพื่อให้ User เลือกง่าย
-- สร้าง Mode เมื่อได้ข้อมูลครบ + User ยืนยัน`
-      },
+- สร้าง Mode เมื่อได้ข้อมูลครบ + User ยืนยัน`;
 
+    // System prompt for Instruction Mode (สร้างคำสั่งฉาก)
+    const instructionSystemPrompt = `You are "AI Scene Writer" - ผู้ช่วยเขียนคำสั่งฉาก 🎬
+
+[🎯 CORE MISSION]
+ช่วย User เขียน "คำสั่งฉาก (Scene Instruction)" สำหรับฉากใน Mode
+- คำสั่งฉาก = โครงสร้างที่ยืดหยุ่น บอกว่าฉากนี้ควรมีอะไร
+- ไม่ต้องระบุ [TOPIC] ตรงๆ เพราะ Episode จะเปลี่ยนไปเรื่อยๆ
+- เขียนเป็นแนวทางที่ AI Expander จะนำไปใช้ขยายความ
+
+[📋 RESPONSE FORMAT - JSON เท่านั้น]
+{
+  "reply": "ข้อความตอบกลับ",
+  "options": ["ตัวเลือก1", "ตัวเลือก2"] หรือ null,
+  "sceneInstructions": [
+    { "blockIndex": 0, "instruction": "คำสั่งฉาก 1" },
+    { "blockIndex": 1, "instruction": "คำสั่งฉาก 2" }
+  ] หรือ null
+}
+
+[💬 CONVERSATION FLOW]
+1. **ถามว่าต้องการสร้างคำสั่งสำหรับฉากไหน**
+   - ดู blocks ใน currentModeData แล้วแสดงรายชื่อฉาก
+   - ให้ options รวมถึง "🎬 ทุกฉาก" เพื่อสร้างทั้งหมดในครั้งเดียว
+   - ให้ options แต่ละฉากด้วย
+
+2. **เมื่อ User เลือก "ทุกฉาก" หรือพิมพ์ว่าต้องการทุกฉาก**
+   - สร้างคำสั่งฉากสำหรับทุก block ทันที
+   - Return sceneInstructions array ที่มีคำสั่งครบทุกฉาก
+
+3. **เมื่อ User เลือกฉากเดียว**
+   - สร้างคำสั่งฉากสำหรับฉากนั้น
+   - Return sceneInstructions array ที่มี 1 item
+
+[📝 SCENE INSTRUCTION EXAMPLES]
+คำสั่งฉากที่ดีควร:
+- **ยืดหยุ่น**: ไม่ระบุ topic ตายตัว ใช้คำว่า "หัวข้อหลัก" หรือ "เนื้อหาที่กำลังเล่า"
+- **มีโครงสร้าง**: บอกว่าฉากควรมีอะไร (เปิดฉากอย่างไร, จบอย่างไร)
+- **มีอารมณ์**: กำหนดโทนของฉาก
+
+ตัวอย่างคำสั่งฉาก:
+- ฉากเปิดเรื่อง: "เปิดฉากด้วย wide shot แนะนำสถานที่หลัก บรรยากาศสงบ ค่อยๆ zoom เข้าหาตัวละครหลัก แสดงความเชื่อมโยงกับหัวข้อที่กำลังเล่า"
+- ฉากแนะนำปัญหา: "เปลี่ยนบรรยากาศเป็นความตึงเครียด แนะนำปัญหาที่เกี่ยวข้องกับหัวข้อ ตัวละครแสดงความกังวล"
+- ฉากสำรวจ: "ตัวละครสำรวจหรือเรียนรู้เกี่ยวกับหัวข้อ ใช้การเคลื่อนกล้องหลากหลาย แสดงรายละเอียดที่น่าสนใจ"
+- ฉากค้นพบ: "จุดพีคของเรื่อง ตัวละครค้นพบสิ่งสำคัญ ใช้ dramatic lighting และ close-up"
+- ฉากบทสรุป: "สรุปเรื่องราว แสดง resolution บรรยากาศผ่อนคลาย ปิดท้ายด้วย message ที่ชัดเจน"
+
+[⚡ IMPORTANT]
+- อ่าน currentModeData.blocks เพื่อดูรายชื่อฉากที่มี
+- เมื่อ User บอก "ทุกฉาก" ให้สร้างคำสั่งครบทุก block ทันที
+- ตอบกลับเสมอ ห้ามเงียบ
+- sceneInstructions ต้องมี blockIndex ที่ตรงกับ index ของ blocks array`;
+
+    // Select system prompt based on aiMode
+    const systemPrompt = aiMode === 'instruction' ? instructionSystemPrompt : architectSystemPrompt;
+
+    const fullHistory = [
+      { role: 'system', content: systemPrompt },
       ...history,
       {
         role: 'user',
@@ -1206,21 +1308,20 @@ exports.scheduleJobs = functions.pubsub.schedule('every 1 minutes')
                   let modeMetadata = {};
                   let episodeData = null; // Episode from Content Queue
 
-                  // === CONTENT QUEUE INTEGRATION ===
-                  // Fetch next pending episode from queue
-                  const episodesRef = project.ref.collection('episodes')
-                    .where('status', '==', 'pending')
-                    .orderBy('order', 'asc')
-                    .limit(1);
-                  const episodesSnap = await episodesRef.get();
+                  // === CONTENT QUEUE INTEGRATION using SHARED HELPER ===
+                  // Get episode selection mode from project settings (default: sequential)
+                  const episodeSelectionMode = project.data.episodeSelection || 'sequential';
+                  console.log(`      🎯 Episode selection mode: ${episodeSelectionMode}`);
 
-                  if (!episodesSnap.empty) {
-                    const episodeDoc = episodesSnap.docs[0];
-                    episodeData = { id: episodeDoc.id, ...episodeDoc.data() };
-                    console.log(`      📺 Episode from Queue: "${episodeData.title}"`);
+                  // Use SHARED getNextEpisode helper
+                  const episodeResult = await getNextEpisode(project.ref, episodeSelectionMode);
+
+                  if (episodeResult) {
+                    episodeData = episodeResult;
+                    console.log(`      📺 Episode from Queue: "${episodeData.title}" (mode: ${episodeSelectionMode})`);
 
                     // Mark episode as processing
-                    await episodeDoc.ref.update({
+                    await episodeResult.ref.update({
                       status: 'processing',
                       processingStartedAt: admin.firestore.FieldValue.serverTimestamp()
                     });
@@ -1284,73 +1385,98 @@ exports.scheduleJobs = functions.pubsub.schedule('every 1 minutes')
                     }
                   }
 
-                  // === EXPANDER INTEGRATION (with Episode Context) ===
+                  // === EXPANDER INTEGRATION using SHARED LOGIC ===
                   // Check if project has an Expander selected
                   const expanderId = project.data.expanderId;
-                  if (expanderId && prompts.length > 0) {
+                  let expanderBlocks = [];
+                  let expandedPromptsResult = [];
+                  let titlesAndTags = null;
+
+                  if (expanderId) {
                     console.log(`      ⚡ Expander detected: ${expanderId}`);
                     try {
                       // Fetch Expander blocks
                       const expanderDoc = await project.ref.parent.parent.collection('expanders').doc(expanderId).get();
                       if (expanderDoc.exists) {
                         const expanderData = expanderDoc.data();
-                        const blocks = expanderData.blocks || [];
-
-                        if (blocks.length > 0) {
-                          console.log(`      🔧 Expanding ${prompts.length} prompts with ${blocks.length} blocks...`);
-
-                          const openai = getOpenAI();
-                          const blockInstructions = blocks.map((b, i) => `${i + 1}. ${b.name}: ${b.instruction || b.description || ''}`).join('\n');
-
-                          // Build episode context for AI
-                          const episodeContext = episodeData
-                            ? `\n\n=== EPISODE TOPIC (MUST be the main subject) ===\nTitle: "${episodeData.title}"\nDescription: ${episodeData.description || 'N/A'}\n\nIMPORTANT: The video MUST be about "${episodeData.title}". Adapt the scene to focus on this topic.`
-                            : '';
-
-                          // Build character context
-                          const characterContext = modeMetadata.characters && modeMetadata.characters.length > 0
-                            ? `\n\n=== CHARACTERS ===\n${modeMetadata.characters.map(c => `- ${c.name}: ${c.visualDescription || c.description || 'N/A'}`).join('\n')}`
-                            : '';
-
-                          const expandedPrompts = [];
-                          for (let i = 0; i < prompts.length; i++) {
-                            const prompt = prompts[i];
-                            const response = await openai.chat.completions.create({
-                              model: 'gpt-4o',
-                              messages: [
-                                {
-                                  role: 'system',
-                                  content: `You are a Premium Prompt Expander for AI video generation (Google Flow / Veo).
-
-=== EXPANDER RULES ===
-${blockInstructions}
-${episodeContext}
-${characterContext}
-
-=== OUTPUT REQUIREMENTS ===
-1. Write a DETAILED 8-second video scene prompt in English (150-300 words)
-2. Include: character appearances, lighting, camera angles, ambient sounds, emotions
-3. Be cinematic and immersive
-4. Output ONLY the expanded prompt, no explanations`
-                                },
-                                { role: 'user', content: `Scene ${i + 1}: ${prompt}` }
-                              ],
-                              temperature: 0.7,
-                              max_tokens: 800
-                            });
-
-                            const expanded = response.choices[0]?.message?.content?.trim() || prompt;
-                            expandedPrompts.push(expanded);
-                          }
-
-                          prompts = expandedPrompts;
-                          console.log(`      ✅ Expanded ${prompts.length} prompts successfully`);
-                        }
+                        expanderBlocks = expanderData.blocks || [];
                       }
                     } catch (expandErr) {
-                      console.error(`      ⚠️ Expander error (using original prompts):`, expandErr.message);
+                      console.error(`      ⚠️ Error loading Expander:`, expandErr.message);
                     }
                   }
+
+                  // Use SHARED LOGIC for expansion (same as testPromptPipeline)
+                  if (scenes.length > 0 || prompts.length > 0) {
+                    try {
+                      // Build raw scenes from existing data
+                      const rawScenes = scenes.length > 0
+                        ? scenes.map((s, i) => ({
+                            sceneNumber: i + 1,
+                            blockTitle: s.blockTitle || `Scene ${i + 1}`,
+                            visualPrompt: s.englishPrompt || prompts[i] || '',
+                            rawPrompt: s.englishPrompt || prompts[i] || '',
+                            audioAmbience: s.audioDescription || '',
+                            cameraAngle: s.cameraMovement || 'wide'
+                          }))
+                        : prompts.map((p, i) => ({
+                            sceneNumber: i + 1,
+                            blockTitle: `Scene ${i + 1}`,
+                            visualPrompt: p,
+                            rawPrompt: p,
+                            audioAmbience: '',
+                            cameraAngle: 'wide'
+                          }));
+
+                      console.log(`      🔧 Using SHARED expandScenesWithTopic() for ${rawScenes.length} scenes...`);
+
+                      // Use SHARED HELPER for per-scene expansion
+                      expandedPromptsResult = await expandScenesWithTopic({
+                        rawScenes,
+                        expanderBlocks,
+                        episodeTopic: episodeData?.title || modeMetadata.modeName || 'Video',
+                        episodeDesc: episodeData?.description || modeMetadata.description || '',
+                        characters: modeMetadata.characters || [],
+                        sceneDuration: 8,
+                        modeCategory: modeMetadata.category || 'Cinematic',
+                        systemInstruction: modeMetadata.systemInstruction || ''
+                      });
+
+                      // Update prompts array with expanded versions
+                      prompts = expandedPromptsResult.map(p => p.englishPrompt);
+                      scenes = expandedPromptsResult;
+
+                      console.log(`      ✅ Expanded ${prompts.length} prompts using SHARED LOGIC`);
+
+                      // Generate Titles and Tags using SHARED HELPER
+                      titlesAndTags = await generateTitlesAndTags({
+                        episodeTopic: episodeData?.title || modeMetadata.modeName || 'Video',
+                        episodeDesc: episodeData?.description || '',
+                        modeCategory: modeMetadata.category || 'Entertainment',
+                        expandedPrompts: expandedPromptsResult
+                      });
+
+                    } catch (expandErr) {
+                      console.error(`      ⚠️ Expansion error (using original prompts):`, expandErr.message);
+                    }
+                  }
+
+                  // === SAVE TO readyPrompts/ COLLECTION ===
+                  const readyPromptData = {
+                    prompts: expandedPromptsResult.length > 0 ? expandedPromptsResult : scenes,
+                    titles: titlesAndTags?.titles || null,
+                    tags: titlesAndTags?.tags || null,
+                    episodeId: episodeData?.id || null,
+                    episodeTitle: episodeData?.title || null,
+                    modeId: modeId || null,
+                    modeName: modeMetadata.modeName || null,
+                    expanderId: expanderId || null,
+                    status: 'ready',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp()
+                  };
+
+                  const readyPromptRef = await project.ref.collection('readyPrompts').add(readyPromptData);
+                  console.log(`      📦 Ready prompt saved: ${readyPromptRef.id}`);
 
                   // Create Job with COMPLETE scene data
                   await jobRef.set({
@@ -1376,6 +1502,84 @@ ${characterContext}
                     platform: 'SYSTEM',
                     type: 'info'
                   });
+
+                  // === MOVE EPISODE TO HISTORY & MARK AS USED ===
+                  if (episodeData && episodeData.id) {
+                    try {
+                      const episodeRef = project.ref.collection('episodes').doc(episodeData.id);
+                      
+                      // 1. Save to episodeHistory/ collection
+                      await project.ref.collection('episodeHistory').add({
+                        title: episodeData.title || 'Untitled',
+                        description: episodeData.description || '',
+                        originalOrder: episodeData.order || 0,
+                        originalId: episodeData.id,
+                        usedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        jobId: jobId,
+                        readyPromptId: readyPromptRef.id,
+                        generatedPrompts: expandedPromptsResult.length > 0 ? expandedPromptsResult : scenes,
+                        titles: titlesAndTags?.titles || null,
+                        tags: titlesAndTags?.tags || null,
+                        wasSuccessful: true
+                      });
+
+                      // 2. Mark Episode as used (or delete - we keep it but mark status)
+                      await episodeRef.update({
+                        status: 'used',
+                        usedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        jobId: jobId
+                      });
+
+                      console.log(`      📚 Episode "${episodeData.title}" moved to history`);
+
+                      // === AUTO-REFILL CHECK ===
+                      // Check if episodes are running low and auto-refill is enabled
+                      const projectData = project.data;
+                      if (projectData.autoRefillEnabled) {
+                        const threshold = projectData.autoRefillThreshold || 5;
+                        const refillCount = projectData.autoRefillCount || 10;
+                        const refillPrompt = projectData.autoRefillPrompt || '';
+
+                        const remainingCount = await getRemainingEpisodeCount(project.ref);
+                        console.log(`      📊 Remaining episodes: ${remainingCount} (threshold: ${threshold})`);
+
+                        if (remainingCount < threshold) {
+                          console.log(`      ⚠️ Episodes running low! Triggering auto-refill...`);
+
+                          // Get history for context
+                          const historySnap = await project.ref.collection('episodeHistory')
+                            .orderBy('usedAt', 'desc')
+                            .limit(20)
+                            .get();
+                          
+                          const historyContext = historySnap.docs.map(d => ({
+                            title: d.data().title,
+                            description: d.data().description
+                          }));
+
+                          // Trigger auto-generate (async, don't wait)
+                          autoGenerateEpisodesInternal({
+                            projectRef: project.ref,
+                            userId: userId,
+                            projectId: project.id,
+                            count: refillCount,
+                            prompt: refillPrompt,
+                            historyContext
+                          }).then(result => {
+                            if (result.success) {
+                              console.log(`      ✅ Auto-refill completed: ${result.count} episodes added`);
+                            } else {
+                              console.error(`      ❌ Auto-refill failed:`, result.error);
+                            }
+                          }).catch(err => {
+                            console.error(`      ❌ Auto-refill error:`, err.message);
+                          });
+                        }
+                      }
+                    } catch (historyErr) {
+                      console.error(`      ⚠️ Error moving episode to history:`, historyErr.message);
+                    }
+                  }
 
                   console.log(`      🚀 Job Created: ${jobId}`);
                 } else {
@@ -1823,7 +2027,7 @@ Return ONLY the expanded prompt, no explanations.`;
 
 // Function: Test full prompt pipeline (Mode + Expander → Full Prompts + Titles + Tags)
 exports.testPromptPipeline = functions
-  .runWith({ secrets: ['OPENAI_API_KEY'], timeoutSeconds: 120, memory: '1GB' })
+  .runWith({ secrets: ['OPENAI_API_KEY'], timeoutSeconds: 300, memory: '1GB' })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
@@ -1895,21 +2099,17 @@ exports.testPromptPipeline = functions
         }
       }
 
-      // 3.5. Get Episode from Content Queue (for topic context)
-      let episodeData = null;
-      const episodesSnap = await db
-        .collection('users').doc(userId)
-        .collection('projects').doc(projectId)
-        .collection('episodes')
-        .where('status', '==', 'pending')
-        .orderBy('order', 'asc')
-        .limit(1)
-        .get();
+      // 3.5. Get Episode from Content Queue using SHARED HELPER
+      // Read episode selection mode from project settings (default: sequential)
+      const episodeSelectionMode = project.episodeSelection || 'sequential';
+      const projectRef = db.collection('users').doc(userId).collection('projects').doc(projectId);
+      
+      // Use SHARED getNextEpisode helper (same logic as scheduleJobs)
+      const episodeData = await getNextEpisode(projectRef, episodeSelectionMode);
 
-      if (!episodesSnap.empty) {
-        const episodeDoc = episodesSnap.docs[0];
-        episodeData = { id: episodeDoc.id, ...episodeDoc.data() };
-        console.log(`📺 Episode Topic: "${episodeData.title}"`);
+      if (episodeData) {
+        console.log(`📺 Episode Topic: "${episodeData.title}" (mode: ${episodeSelectionMode})`);
+        // NOTE: We do NOT change episode status for Test - it stays 'pending'
       } else {
         console.log(`⚠️ No pending episodes, using Mode name as topic`);
       }
@@ -1958,21 +2158,52 @@ exports.testPromptPipeline = functions
         tags: titlesAndTags.tags
       };
 
-      // 7. Save Test Result to Project
-      const testResult = {
-        ...result,
-        testedAt: admin.firestore.FieldValue.serverTimestamp(),
+      // 7. Save Test Result to testLogs/ collection (separate from Project, with TTL)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // TTL: 7 days
+
+      const testLogData = {
+        prompts: result.prompts,
+        titles: result.titles,
+        tags: result.tags,
+        episodeId: episodeData?.id || null,
+        episodeTitle: episodeData?.title || null,
         modeId: modeId,
         modeName: modeData.name || 'Unknown',
         expanderId: expanderId || null,
-        sceneCount: rawScenes.length
+        expanderBlockCount: expanderBlocks.length,
+        sceneCount: rawScenes.length,
+        sceneDuration: sceneDuration,
+        totalDuration: rawScenes.length * sceneDuration,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt) // TTL field for cleanup
       };
 
+      // Save to testLogs/ subcollection
+      const testLogRef = await db
+        .collection('users').doc(userId)
+        .collection('projects').doc(projectId)
+        .collection('testLogs')
+        .add(testLogData);
+
+      console.log(`📝 Test log saved: ${testLogRef.id} (expires: ${expiresAt.toISOString()})`);
+
+      // Also update lastPromptTest on Project for quick access
       await db
         .collection('users').doc(userId)
         .collection('projects').doc(projectId)
         .update({
-          lastPromptTest: testResult
+          lastPromptTest: {
+            ...result,
+            testLogId: testLogRef.id,
+            testedAt: admin.firestore.FieldValue.serverTimestamp(),
+            modeId: modeId,
+            modeName: modeData.name || 'Unknown',
+            expanderId: expanderId || null,
+            sceneCount: rawScenes.length,
+            episodeId: episodeData?.id || null,
+            episodeTitle: episodeData?.title || null
+          }
         });
 
       // 8. Log the test with detailed info
@@ -1984,6 +2215,7 @@ exports.testPromptPipeline = functions
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
           platform: 'SYSTEM',
           type: 'test',
+          testLogId: testLogRef.id,
           sceneCount: rawScenes.length,
           sceneDuration: sceneDuration,
           totalLength: rawScenes.length * sceneDuration,
@@ -2056,4 +2288,250 @@ exports.textToSpeechThai = functions
     }
   });
 
+// ============================================
+// AUTO-REFILL SYSTEM
+// ============================================
+
+/**
+ * Auto-Generate Episodes when queue is running low
+ * Called by scheduleJobs or manually via callable
+ */
+async function autoGenerateEpisodesInternal(params) {
+  const { projectRef, userId, projectId, count = 10, prompt = '', historyContext = [] } = params;
+  
+  const openai = getOpenAI();
+  const db = admin.firestore();
+
+  // Build context from history
+  const historyTitles = historyContext.length > 0
+    ? historyContext.map((h, i) => `${i + 1}. ${h.title}`).join('\n')
+    : 'No previous episodes';
+
+  const systemPrompt = `You are an AI Episode Director for video content creation.
+
+=== PREVIOUS EPISODES (for context/style) ===
+${historyTitles}
+
+=== USER INSTRUCTION ===
+${prompt || 'Create engaging video episode topics that follow the established theme/style.'}
+
+=== TASK ===
+Generate ${count} NEW episode ideas that:
+1. Follow the same theme/style as previous episodes (if any)
+2. Are unique and not repetitive
+3. Have catchy, engaging titles
+4. Include brief descriptions
+
+=== OUTPUT FORMAT (JSON) ===
+{
+  "episodes": [
+    { "title": "Episode Title", "description": "Brief 1-2 sentence description" }
+  ]
+}
+
+IMPORTANT: Output valid JSON only, no markdown.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Generate ${count} new episodes` }
+      ],
+      temperature: 0.8,
+      max_tokens: 2000
+    });
+
+    let content = response.choices[0].message.content.trim();
+    content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    const result = JSON.parse(content);
+    const episodes = result.episodes || [];
+
+    if (episodes.length === 0) {
+      console.log(`⚠️ AI returned no episodes`);
+      return { success: false, count: 0 };
+    }
+
+    // Get last order number
+    const lastEpisodeSnap = await projectRef.collection('episodes')
+      .orderBy('order', 'desc')
+      .limit(1)
+      .get();
+    
+    let lastOrder = 0;
+    if (!lastEpisodeSnap.empty) {
+      lastOrder = lastEpisodeSnap.docs[0].data().order || 0;
+    }
+
+    // Batch write new episodes
+    const batch = db.batch();
+    episodes.forEach((ep, i) => {
+      const ref = projectRef.collection('episodes').doc();
+      batch.set(ref, {
+        title: ep.title,
+        description: ep.description || '',
+        order: lastOrder + i + 1,
+        status: 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'auto-refill'
+      });
+    });
+
+    await batch.commit();
+
+    // Log the auto-generation
+    await projectRef.collection('logs').add({
+      message: `🤖 Auto-Refill: Generated ${episodes.length} new episodes`,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      platform: 'SYSTEM',
+      type: 'auto-refill',
+      episodeCount: episodes.length
+    });
+
+    console.log(`✅ Auto-generated ${episodes.length} new episodes for project ${projectId}`);
+
+    return { success: true, count: episodes.length, episodes };
+
+  } catch (error) {
+    console.error('Auto-generate episodes error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// CLEANUP FUNCTION: Delete expired testLogs (TTL 7 days)
+// Runs daily at 2:00 AM UTC
+// ============================================
+exports.cleanupExpiredTestLogs = functions.pubsub.schedule('0 2 * * *')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const db = admin.firestore();
+    const now = admin.firestore.Timestamp.now();
+    
+    console.log('🧹 Starting cleanup of expired testLogs...');
+    
+    try {
+      // Get all users
+      const usersSnap = await db.collection('users').get();
+      let totalDeleted = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const projectsSnap = await userDoc.ref.collection('projects').get();
+        
+        for (const projectDoc of projectsSnap.docs) {
+          // Find expired testLogs
+          const expiredLogs = await projectDoc.ref.collection('testLogs')
+            .where('expiresAt', '<', now)
+            .get();
+          
+          if (!expiredLogs.empty) {
+            const batch = db.batch();
+            expiredLogs.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            totalDeleted += expiredLogs.size;
+            console.log(`   Deleted ${expiredLogs.size} expired testLogs from project ${projectDoc.id}`);
+          }
+        }
+      }
+      
+      console.log(`✅ Cleanup complete: Deleted ${totalDeleted} expired testLogs`);
+    } catch (error) {
+      console.error('❌ Cleanup error:', error);
+    }
+  });
+
+// ============================================
+// CLEANUP FUNCTION: Delete old episodeHistory (older than 30 days)
+// Runs weekly on Sunday at 3:00 AM UTC
+// ============================================
+exports.cleanupOldEpisodeHistory = functions.pubsub.schedule('0 3 * * 0')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const db = admin.firestore();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(thirtyDaysAgo);
+    
+    console.log('🧹 Starting cleanup of old episodeHistory (>30 days)...');
+    
+    try {
+      const usersSnap = await db.collection('users').get();
+      let totalDeleted = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const projectsSnap = await userDoc.ref.collection('projects').get();
+        
+        for (const projectDoc of projectsSnap.docs) {
+          // Find old history entries
+          const oldHistory = await projectDoc.ref.collection('episodeHistory')
+            .where('usedAt', '<', cutoffTimestamp)
+            .get();
+          
+          if (!oldHistory.empty) {
+            const batch = db.batch();
+            oldHistory.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            totalDeleted += oldHistory.size;
+            console.log(`   Deleted ${oldHistory.size} old history entries from project ${projectDoc.id}`);
+          }
+        }
+      }
+      
+      console.log(`✅ History cleanup complete: Deleted ${totalDeleted} old entries`);
+    } catch (error) {
+      console.error('❌ History cleanup error:', error);
+    }
+  });
+
+// Callable function for manual trigger
+exports.autoGenerateEpisodes = functions
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const userId = context.auth.uid;
+    const { projectId, count = 10, prompt = '' } = data;
+
+    if (!projectId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing projectId');
+    }
+
+    const db = admin.firestore();
+    const projectRef = db.collection('users').doc(userId).collection('projects').doc(projectId);
+
+    // Check project exists
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Project not found');
+    }
+
+    // Get history for context
+    const historySnap = await projectRef.collection('episodeHistory')
+      .orderBy('usedAt', 'desc')
+      .limit(20)
+      .get();
+    
+    const historyContext = historySnap.docs.map(d => ({
+      title: d.data().title,
+      description: d.data().description
+    }));
+
+    const result = await autoGenerateEpisodesInternal({
+      projectRef,
+      userId,
+      projectId,
+      count,
+      prompt,
+      historyContext
+    });
+
+    if (!result.success) {
+      throw new functions.https.HttpsError('internal', result.error || 'Failed to generate episodes');
+    }
+
+    return result;
+  });
 
