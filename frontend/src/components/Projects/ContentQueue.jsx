@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, GripVertical, Loader2, Sparkles, Check, ChevronDown, Send, X, Play, Pause } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Loader2, Sparkles, Check, ChevronDown, Send, X, Play, Pause, History, RotateCcw } from 'lucide-react';
 import { db, auth, functions } from '../../firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, where } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { twMerge } from 'tailwind-merge';
@@ -9,8 +9,10 @@ import { twMerge } from 'tailwind-merge';
 const ContentQueue = ({ projectId }) => {
     const [currentUser, setCurrentUser] = useState(null);
     const [episodes, setEpisodes] = useState([]);
+    const [episodeHistory, setEpisodeHistory] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'history'
     
     // AI Chat State
     const [isAiOpen, setIsAiOpen] = useState(false);
@@ -27,17 +29,23 @@ const ContentQueue = ({ projectId }) => {
     // Auth & Data Fetching
     useEffect(() => {
         let unsubEpisodes = null;
+        let unsubHistory = null;
         
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
             
-            // Cleanup previous listener if exists
+            // Cleanup previous listeners if exists
             if (unsubEpisodes) {
                 unsubEpisodes();
                 unsubEpisodes = null;
             }
+            if (unsubHistory) {
+                unsubHistory();
+                unsubHistory = null;
+            }
             
             if (user && projectId) {
+                // Listen to episodes
                 const episodesRef = collection(db, 'users', user.uid, 'projects', projectId, 'episodes');
                 const q = query(episodesRef, orderBy('order', 'asc'));
                 
@@ -51,14 +59,32 @@ const ContentQueue = ({ projectId }) => {
                         setIsLoading(false);
                     },
                     (error) => {
-                        // Handle permission errors gracefully
                         console.warn('ContentQueue: Firebase listener error:', error.code);
                         setEpisodes([]);
                         setIsLoading(false);
                     }
                 );
+
+                // Listen to episode history
+                const historyRef = collection(db, 'users', user.uid, 'projects', projectId, 'episodeHistory');
+                const hq = query(historyRef, orderBy('usedAt', 'desc'));
+                
+                unsubHistory = onSnapshot(hq,
+                    (snapshot) => {
+                        const loadedHistory = [];
+                        snapshot.forEach(doc => {
+                            loadedHistory.push({ id: doc.id, ...doc.data() });
+                        });
+                        setEpisodeHistory(loadedHistory);
+                    },
+                    (error) => {
+                        console.warn('ContentQueue: History listener error:', error.code);
+                        setEpisodeHistory([]);
+                    }
+                );
             } else {
                 setEpisodes([]);
+                setEpisodeHistory([]);
                 setIsLoading(false);
             }
         });
@@ -66,6 +92,7 @@ const ContentQueue = ({ projectId }) => {
         return () => {
             unsubscribeAuth();
             if (unsubEpisodes) unsubEpisodes();
+            if (unsubHistory) unsubHistory();
         };
     }, [projectId]);
 
@@ -187,7 +214,19 @@ const ContentQueue = ({ projectId }) => {
     };
 
     const pendingCount = episodes.filter(e => e.status === 'pending').length;
-    const completedCount = episodes.filter(e => e.status === 'completed').length;
+    const processingCount = episodes.filter(e => e.status === 'processing').length;
+    const usedCount = episodes.filter(e => e.status === 'used').length;
+
+    // Status Badge Helper
+    const getStatusBadge = (status) => {
+        const styles = {
+            pending: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30', label: '⏳ รอดำเนินการ' },
+            processing: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', label: '🔄 กำลังทำงาน' },
+            used: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30', label: '✅ ใช้แล้ว' },
+            completed: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30', label: '✅ เสร็จแล้ว' }
+        };
+        return styles[status] || styles.pending;
+    };
 
     if (isLoading) {
         return (
@@ -213,16 +252,49 @@ const ContentQueue = ({ projectId }) => {
                     </div>
                     <div className="flex gap-2">
                         <span className="px-3 py-1 bg-yellow-500/20 text-yellow-300 rounded-lg text-sm font-medium">
-                            📋 {pendingCount} รอดำเนินการ
+                            ⏳ {pendingCount} รอ
                         </span>
+                        {processingCount > 0 && (
+                            <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-sm font-medium">
+                                🔄 {processingCount} กำลังทำ
+                            </span>
+                        )}
                         <span className="px-3 py-1 bg-green-500/20 text-green-300 rounded-lg text-sm font-medium">
-                            ✅ {completedCount} เสร็จแล้ว
+                            ✅ {episodeHistory.length} ใช้แล้ว
                         </span>
                     </div>
                 </div>
                 <p className="text-sm text-white/60">
                     💡 เมื่อ Schedule ทำงาน ระบบจะดึง Episode ถัดไปที่ยัง "รอดำเนินการ" มาสร้างวิดีโอ โดยใช้ Mode Template + Expander ที่ตั้งค่าไว้
                 </p>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="flex gap-2">
+                <button
+                    onClick={() => setActiveTab('queue')}
+                    className={twMerge(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+                        activeTab === 'queue'
+                            ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+                            : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                    )}
+                >
+                    <Sparkles size={16} />
+                    Queue ({pendingCount + processingCount})
+                </button>
+                <button
+                    onClick={() => setActiveTab('history')}
+                    className={twMerge(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+                        activeTab === 'history'
+                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                            : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                    )}
+                >
+                    <History size={16} />
+                    History ({episodeHistory.length})
+                </button>
             </div>
 
             {/* AI Episode Generator Button */}
@@ -322,21 +394,24 @@ const ContentQueue = ({ projectId }) => {
                 </div>
             </div>
 
-            {/* Episode List */}
+            {/* Episode List - Queue Tab */}
+            {activeTab === 'queue' && (
             <div className="space-y-2">
-                {episodes.length === 0 ? (
+                {episodes.filter(e => e.status !== 'used').length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                         <p className="text-lg mb-2">ยังไม่มี Episode</p>
                         <p className="text-sm">เพิ่ม Episode ด้วยตนเอง หรือใช้ AI ช่วยสร้าง</p>
                     </div>
                 ) : (
-                    episodes.map((episode, idx) => (
+                    episodes.filter(e => e.status !== 'used').map((episode, idx) => {
+                        const badge = getStatusBadge(episode.status);
+                        return (
                         <div
                             key={episode.id}
                             className={twMerge(
                                 "flex items-center gap-3 bg-white/5 border rounded-xl p-4 group transition-all",
-                                episode.status === 'completed' 
-                                    ? "border-green-500/30 bg-green-500/5" 
+                                episode.status === 'processing' 
+                                    ? "border-blue-500/30 bg-blue-500/5" 
                                     : "border-white/10 hover:border-yellow-500/30"
                             )}
                         >
@@ -346,19 +421,14 @@ const ContentQueue = ({ projectId }) => {
                             {/* Order Number */}
                             <span className={twMerge(
                                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
-                                episode.status === 'completed'
-                                    ? "bg-green-500/20 text-green-400"
-                                    : "bg-yellow-500/20 text-yellow-400"
+                                badge.bg, badge.text
                             )}>
                                 {idx + 1}
                             </span>
 
                             {/* Episode Info */}
                             <div className="flex-1 min-w-0">
-                                <h5 className={twMerge(
-                                    "font-medium truncate",
-                                    episode.status === 'completed' ? "text-green-300 line-through" : "text-white"
-                                )}>
+                                <h5 className="font-medium truncate text-white">
                                     {episode.title}
                                 </h5>
                                 {episode.description && (
@@ -369,11 +439,9 @@ const ContentQueue = ({ projectId }) => {
                             {/* Status Badge */}
                             <span className={twMerge(
                                 "px-3 py-1 rounded-lg text-xs font-medium",
-                                episode.status === 'completed'
-                                    ? "bg-green-500/20 text-green-400"
-                                    : "bg-yellow-500/20 text-yellow-400"
+                                badge.bg, badge.text
                             )}>
-                                {episode.status === 'completed' ? '✅ เสร็จแล้ว' : '⏳ รอดำเนินการ'}
+                                {badge.label}
                             </span>
 
                             {/* Actions */}
@@ -399,9 +467,68 @@ const ContentQueue = ({ projectId }) => {
                                 </button>
                             </div>
                         </div>
+                        );
+                    })
+                )}
+            </div>
+            )}
+
+            {/* Episode History Tab */}
+            {activeTab === 'history' && (
+            <div className="space-y-2">
+                {episodeHistory.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                        <p className="text-lg mb-2">ยังไม่มีประวัติ</p>
+                        <p className="text-sm">Episode ที่ใช้แล้วจะแสดงที่นี่</p>
+                    </div>
+                ) : (
+                    episodeHistory.map((episode, idx) => (
+                        <div
+                            key={episode.id}
+                            className="flex items-center gap-3 bg-green-500/5 border border-green-500/20 rounded-xl p-4"
+                        >
+                            {/* Order Number */}
+                            <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold bg-green-500/20 text-green-400">
+                                {idx + 1}
+                            </span>
+
+                            {/* Episode Info */}
+                            <div className="flex-1 min-w-0">
+                                <h5 className="font-medium truncate text-green-300">
+                                    {episode.title}
+                                </h5>
+                                {episode.description && (
+                                    <p className="text-xs text-gray-500 truncate">{episode.description}</p>
+                                )}
+                                {episode.usedAt && (
+                                    <p className="text-xs text-gray-600 mt-1">
+                                        ใช้เมื่อ: {episode.usedAt?.toDate?.()?.toLocaleDateString('th-TH') || 'N/A'}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Status Badge */}
+                            <span className="px-3 py-1 rounded-lg text-xs font-medium bg-green-500/20 text-green-400">
+                                ✅ ใช้แล้ว
+                            </span>
+
+                            {/* Restore Button */}
+                            <button
+                                onClick={async () => {
+                                    // Move back to queue (optional feature)
+                                    // This would require implementing a restore function
+                                }}
+                                className="p-2 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-colors opacity-50 cursor-not-allowed"
+                                title="ย้ายกลับ Queue (เร็วๆ นี้)"
+                                disabled
+                            >
+                                <RotateCcw size={14} />
+                            </button>
+                        </div>
                     ))
                 )}
             </div>
+            )}
         </div>
     );
 };

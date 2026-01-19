@@ -1635,7 +1635,93 @@ export default function Projects() {
 
                             {/* --- TAB CONTENT: CONTENT QUEUE --- */}
                             {activeTab === 'queue' && (
-                                <div className="animate-in fade-in slide-in-from-right-4 min-h-[500px]">
+                                <div className="animate-in fade-in slide-in-from-right-4 min-h-[500px] space-y-6">
+                                    {/* Episode Settings Panel */}
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            ⚙️ Episode Settings
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            {/* Episode Selection Mode */}
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">วิธีเลือก Episode</label>
+                                                <select
+                                                    value={selectedProject?.episodeSelection || 'sequential'}
+                                                    onChange={async (e) => {
+                                                        if (!currentUser || !selectedProject) return;
+                                                        await setDoc(doc(db, 'users', currentUser.uid, 'projects', selectedProject.id), 
+                                                            { episodeSelection: e.target.value }, { merge: true });
+                                                    }}
+                                                    className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:border-yellow-500 outline-none"
+                                                >
+                                                    <option value="sequential">เรียงตามลำดับ (1, 2, 3...)</option>
+                                                    <option value="random">สุ่ม</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Auto-Refill Toggle */}
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Auto-Refill</label>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!currentUser || !selectedProject) return;
+                                                        await setDoc(doc(db, 'users', currentUser.uid, 'projects', selectedProject.id), 
+                                                            { autoRefillEnabled: !selectedProject?.autoRefillEnabled }, { merge: true });
+                                                    }}
+                                                    className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                                        selectedProject?.autoRefillEnabled 
+                                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                                                            : 'bg-white/5 text-gray-400 border border-white/10'
+                                                    }`}
+                                                >
+                                                    {selectedProject?.autoRefillEnabled ? '✅ เปิด' : '❌ ปิด'}
+                                                </button>
+                                            </div>
+
+                                            {/* Auto-Refill Threshold */}
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">เหลือกี่ Episode ถึงเติม</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="20"
+                                                    defaultValue={selectedProject?.autoRefillThreshold || 5}
+                                                    key={`threshold-${selectedProject?.id}-${selectedProject?.autoRefillThreshold}`}
+                                                    onBlur={async (e) => {
+                                                        if (!currentUser || !selectedProject) return;
+                                                        const val = parseInt(e.target.value) || 5;
+                                                        if (val !== selectedProject?.autoRefillThreshold) {
+                                                            await setDoc(doc(db, 'users', currentUser.uid, 'projects', selectedProject.id), 
+                                                                { autoRefillThreshold: val }, { merge: true });
+                                                        }
+                                                    }}
+                                                    className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:border-yellow-500 outline-none"
+                                                />
+                                            </div>
+
+                                            {/* Auto-Refill Count */}
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">สร้างครั้งละกี่ Episode</label>
+                                                <input
+                                                    type="number"
+                                                    min="5"
+                                                    max="50"
+                                                    defaultValue={selectedProject?.autoRefillCount || 10}
+                                                    key={`count-${selectedProject?.id}-${selectedProject?.autoRefillCount}`}
+                                                    onBlur={async (e) => {
+                                                        if (!currentUser || !selectedProject) return;
+                                                        const val = parseInt(e.target.value) || 10;
+                                                        if (val !== selectedProject?.autoRefillCount) {
+                                                            await setDoc(doc(db, 'users', currentUser.uid, 'projects', selectedProject.id), 
+                                                                { autoRefillCount: val }, { merge: true });
+                                                        }
+                                                    }}
+                                                    className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:border-yellow-500 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <ContentQueue projectId={selectedProject.id} />
                                 </div>
                             )}

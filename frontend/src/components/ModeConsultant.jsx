@@ -5,15 +5,61 @@ import { functions } from '../firebase';
 
 const ModeConsultant = ({ modeData, setModeData }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState([
-        { role: 'assistant', content: "สวัสดีครับ! ผมคือ AI Story Director 🎬\n\nเล่าเรื่องราวที่อยากสร้างมาได้เลย ผมพร้อมช่วยคิดไอเดีย ตัวละคร หรือโครงเรื่องครับ\n\nพอพร้อมแล้ว กดปุ่ม ✨ สร้าง Mode ด้านล่างได้เลย!" }
-    ]);
+    // AI Mode: 'architect' (สร้างโครงเรื่อง) or 'instruction' (สร้างคำสั่งฉาก)
+    const [aiMode, setAiMode] = useState('architect');
+    
+    const getInitialMessage = (mode) => {
+        if (mode === 'instruction') {
+            return { role: 'assistant', content: "สวัสดีครับ! ผมคือ AI Scene Writer 🎬\n\nผมจะช่วยเขียน **คำสั่งฉาก (Scene Instruction)** สำหรับแต่ละฉากใน Mode ของคุณครับ\n\nบอกผมว่าต้องการสร้างคำสั่งสำหรับฉากไหนครับ?" };
+        }
+        return { role: 'assistant', content: "สวัสดีครับ! ผมคือ AI Story Director 🎬\n\nเล่าเรื่องราวที่อยากสร้างมาได้เลย ผมพร้อมช่วยคิดไอเดีย ตัวละคร หรือโครงเรื่องครับ\n\nพอพร้อมแล้ว กดปุ่ม ✨ สร้าง Mode ด้านล่างได้เลย!" };
+    };
+    
+    const [messages, setMessages] = useState([getInitialMessage('architect')]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [pendingFix, setPendingFix] = useState(null); // Stores { suggestedFix, changeLog }
     const [inputFields, setInputFields] = useState(null); // NEW: Dynamic input fields from AI
     const [fieldValues, setFieldValues] = useState({}); // NEW: Values for input fields
     const [undoStack, setUndoStack] = useState([]); // UNDO: Store previous states
+    
+    // Theme colors based on AI Mode
+    const themeColors = aiMode === 'instruction' ? {
+        primary: 'orange',
+        gradient: 'from-orange-600 to-amber-600',
+        gradientHover: 'from-orange-500 to-amber-500',
+        bg: 'bg-orange-600',
+        bgHover: 'hover:bg-orange-500',
+        text: 'text-orange-400',
+        border: 'border-orange-500/30',
+        bgLight: 'bg-orange-600/20',
+        bgLightHover: 'hover:bg-orange-600/40',
+        textLight: 'text-orange-300',
+        shadow: 'hover:shadow-[0_0_20px_rgba(249,115,22,0.6)]',
+        ring: 'focus:ring-orange-500/50'
+    } : {
+        primary: 'violet',
+        gradient: 'from-violet-600 to-fuchsia-600',
+        gradientHover: 'from-violet-500 to-fuchsia-500',
+        bg: 'bg-violet-600',
+        bgHover: 'hover:bg-violet-500',
+        text: 'text-violet-400',
+        border: 'border-violet-500/30',
+        bgLight: 'bg-violet-600/20',
+        bgLightHover: 'hover:bg-violet-600/40',
+        textLight: 'text-violet-300',
+        shadow: 'hover:shadow-[0_0_20px_rgba(168,85,247,0.6)]',
+        ring: 'focus:ring-violet-500/50'
+    };
+    
+    // Handle AI Mode change
+    const handleAiModeChange = (newMode) => {
+        setAiMode(newMode);
+        setMessages([getInitialMessage(newMode)]);
+        setPendingFix(null);
+        setInputFields(null);
+        setFieldValues({});
+    };
 
     const messagesEndRef = useRef(null);
 
@@ -54,7 +100,8 @@ const ModeConsultant = ({ modeData, setModeData }) => {
             const response = await consultantChat({
                 message: userMessage,
                 history: history,
-                currentModeData: modeData
+                currentModeData: modeData,
+                aiMode: aiMode // Pass AI mode to backend
             });
 
             console.log('[ModeConsultant] AI Response:', response.data);
@@ -93,6 +140,44 @@ const ModeConsultant = ({ modeData, setModeData }) => {
                     fix: suggestedFix,
                     logs: data.changeLog && data.changeLog.length > 0 ? data.changeLog : ["สร้าง Mode ใหม่: " + (suggestedFix.name || "Template")]
                 });
+            }
+
+            // NEW: Handle Scene Instructions from AI Scene Writer
+            if (data.sceneInstructions && data.sceneInstructions.length > 0) {
+                console.log('[ModeConsultant] Applying Scene Instructions:', data.sceneInstructions);
+                
+                // Apply scene instructions to modeData blocks
+                setModeData(prevMode => {
+                    const updatedBlocks = [...(prevMode.blocks || [])];
+                    
+                    data.sceneInstructions.forEach(({ blockIndex, instruction }) => {
+                        if (updatedBlocks[blockIndex]) {
+                            // Update the first evolution step with sceneInstruction
+                            if (updatedBlocks[blockIndex].evolution && updatedBlocks[blockIndex].evolution.length > 0) {
+                                updatedBlocks[blockIndex].evolution[0] = {
+                                    ...updatedBlocks[blockIndex].evolution[0],
+                                    sceneInstruction: instruction
+                                };
+                            } else {
+                                // Create evolution if not exists
+                                updatedBlocks[blockIndex].evolution = [{
+                                    id: Date.now() + blockIndex,
+                                    stepPercentage: 100,
+                                    sceneInstruction: instruction
+                                }];
+                            }
+                        }
+                    });
+                    
+                    return { ...prevMode, blocks: updatedBlocks };
+                });
+                
+                // Show success message
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `✅ **บันทึกคำสั่งฉากเรียบร้อย!**\n\nได้เพิ่มคำสั่งฉากให้ ${data.sceneInstructions.length} ฉากแล้วครับ\n\nกรุณากด **Save Mode** เพื่อบันทึกการเปลี่ยนแปลง`,
+                    options: []
+                }]);
             }
 
         } catch (error) {
@@ -243,7 +328,7 @@ const ModeConsultant = ({ modeData, setModeData }) => {
             {/* 1. BRAIN TRIGGER */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`fixed bottom-[20px] right-[20px] z-50 w-12 h-12 rounded-full flex items-center justify-center transition-all bg-gradient-to-br from-violet-600 to-fuchsia-600 hover:scale-110 active:scale-95 border-2 border-white/20 shadow-lg hover:shadow-[0_0_20px_rgba(168,85,247,0.6)]`}
+                className={`fixed bottom-[20px] right-[20px] z-50 w-12 h-12 rounded-full flex items-center justify-center transition-all bg-gradient-to-br ${themeColors.gradient} hover:scale-110 active:scale-95 border-2 border-white/20 shadow-lg ${themeColors.shadow}`}
             >
                 {isOpen ? <X size={20} className="text-white" /> : <Brain size={24} className="text-white animate-pulse" />}
             </button>
@@ -252,26 +337,57 @@ const ModeConsultant = ({ modeData, setModeData }) => {
             {isOpen && (
                 <div className="fixed bottom-[20px] right-[80px] z-50 w-[400px] max-h-[80vh] h-[650px] bg-[#0f172a] rounded-2xl shadow-2xl border border-white/10 flex flex-col overflow-hidden backdrop-blur-xl bg-opacity-95 animate-in slide-in-from-right-10 fade-in duration-300">
                     {/* Header */}
-                    <div className="p-4 bg-slate-900/50 border-b border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-violet-600/20 flex items-center justify-center">
-                                <Brain size={20} className="text-violet-400" />
+                    <div className="p-4 bg-slate-900/50 border-b border-white/5">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full ${themeColors.bgLight} flex items-center justify-center transition-colors`}>
+                                    <Brain size={20} className={themeColors.text} />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-lg">
+                                        {aiMode === 'instruction' ? 'AI Scene Writer' : 'AI Story Director'}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 font-mono">
+                                        {aiMode === 'instruction' ? 'ผู้เขียนคำสั่งฉาก' : 'ผู้กำกับหนัง AI ระดับโลก'}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-white font-bold text-lg">AI Story Director</h3>
-                                <p className="text-xs text-slate-400 font-mono">ผู้กำกับหนัง AI ระดับโลก</p>
-                            </div>
+                            {/* UNDO Button */}
+                            {undoStack.length > 0 && (
+                                <button
+                                    onClick={handleUndo}
+                                    className="px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 text-xs rounded-lg border border-orange-500/30 transition-all flex items-center gap-1"
+                                    title={`Undo (${undoStack.length} ขั้นตอน)`}
+                                >
+                                    ↩️ Undo
+                                </button>
+                            )}
                         </div>
-                        {/* UNDO Button */}
-                        {undoStack.length > 0 && (
+                        {/* Mode Switcher */}
+                        <div className="flex gap-2">
                             <button
-                                onClick={handleUndo}
-                                className="px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/40 text-orange-300 text-xs rounded-lg border border-orange-500/30 transition-all flex items-center gap-1"
-                                title={`Undo (${undoStack.length} ขั้นตอน)`}
+                                onClick={() => handleAiModeChange('architect')}
+                                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                                    aiMode === 'architect'
+                                        ? 'bg-violet-600 text-white shadow-lg'
+                                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                }`}
                             >
-                                ↩️ Undo
+                                <Sparkles size={14} />
+                                สร้างโครงเรื่อง
                             </button>
-                        )}
+                            <button
+                                onClick={() => handleAiModeChange('instruction')}
+                                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                                    aiMode === 'instruction'
+                                        ? 'bg-orange-600 text-white shadow-lg'
+                                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                }`}
+                            >
+                                <Brain size={14} />
+                                สร้างคำสั่งฉาก
+                            </button>
+                        </div>
                     </div>
 
                     {/* Messages */}
@@ -323,7 +439,7 @@ const ModeConsultant = ({ modeData, setModeData }) => {
                                                 key={i}
                                                 onClick={() => handleSend(opt)}
                                                 disabled={loading || pendingFix !== null}
-                                                className="px-3 py-1.5 bg-violet-600/20 hover:bg-violet-600/40 text-violet-300 text-xs rounded-full border border-violet-500/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className={`px-3 py-1.5 ${themeColors.bgLight} ${themeColors.bgLightHover} ${themeColors.textLight} text-xs rounded-full border ${themeColors.border} transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
                                             >
                                                 {opt}
                                             </button>
@@ -437,14 +553,14 @@ const ModeConsultant = ({ modeData, setModeData }) => {
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                    placeholder="เล่าเรื่องราวที่อยากสร้าง..."
+                                    placeholder={aiMode === 'instruction' ? 'บอกฉากที่ต้องการสร้างคำสั่ง...' : 'เล่าเรื่องราวที่อยากสร้าง...'}
                                     disabled={pendingFix !== null}
-                                    className="w-full bg-slate-800 text-white rounded-full pl-4 pr-10 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500/50 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed placeholder-slate-500"
+                                    className={`w-full bg-slate-800 text-white rounded-full pl-4 pr-10 py-3 text-sm focus:outline-none focus:ring-1 ${themeColors.ring} border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed placeholder-slate-500`}
                                 />
                                 <button
                                     onClick={() => handleSend()}
                                     disabled={!input.trim() || loading || pendingFix !== null}
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 p-2 bg-violet-600 rounded-full text-white hover:bg-violet-500 disabled:bg-slate-700 disabled:text-slate-500 transition-colors"
+                                    className={`absolute right-1 top-1/2 -translate-y-1/2 p-2 ${themeColors.bg} rounded-full text-white ${themeColors.bgHover} disabled:bg-slate-700 disabled:text-slate-500 transition-colors`}
                                 >
                                     <Send size={14} />
                                 </button>

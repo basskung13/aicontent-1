@@ -1076,7 +1076,7 @@ ${sceneText}
                                                         accept="image/*"
                                                         onChange={handleImageUpload}
                                                         disabled={!isEditorActive || isSaving || isUploading}
-                                                        className="text-xs text-gray-400 file:mr-3 file:py-2.5 file:px-5 file:rounded-xl file:border file:border-red-500/30 file:text-sm file:font-bold file:bg-gradient-to-r file:from-red-600/20 file:to-orange-600/20 file:text-red-300 hover:file:from-red-600/30 hover:file:to-orange-600/30 hover:file:border-red-500/50 file:transition-all file:duration-300 file:shadow-lg file:shadow-red-500/10 cursor-pointer disabled:opacity-50"
+                                                        className="text-sm text-slate-300 file:mr-3 file:py-2.5 file:px-5 file:rounded-xl file:border file:border-amber-400/50 file:text-sm file:font-bold file:bg-amber-500/30 file:text-amber-200 hover:file:bg-amber-500/50 hover:file:border-amber-400/70 hover:file:text-white file:transition-all file:duration-300 file:shadow-lg file:shadow-amber-500/20 file:cursor-pointer cursor-pointer disabled:opacity-50"
                                                     />
                                                     <p className="text-[10px] text-slate-500">
                                                         Max size: 3MB. Formats: JPG, PNG, WEBP.

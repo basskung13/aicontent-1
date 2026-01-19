@@ -1,5 +1,5 @@
 import React from 'react';
-import { Type, Trash2 } from 'lucide-react';
+import { Type, Trash2, FileText } from 'lucide-react';
 
 const CinematicStep = ({ stage, onUpdate, onRemove }) => {
     return (
@@ -38,6 +38,23 @@ const CinematicStep = ({ stage, onUpdate, onRemove }) => {
                         <Trash2 size={14} />
                     </button>
                 </div>
+            </div>
+
+            {/* Scene Instruction Textarea */}
+            <div className="mt-3 pt-3 border-t border-white/5">
+                <div className="flex items-center gap-2 mb-2">
+                    <FileText size={12} className="text-orange-400" />
+                    <span className="text-xs font-medium text-orange-300">Scene Instruction (คำสั่งฉาก)</span>
+                </div>
+                <textarea
+                    value={stage.sceneInstruction || ''}
+                    onChange={(e) => onUpdate('sceneInstruction', e.target.value)}
+                    placeholder="เขียนคำสั่งสำหรับฉากนี้... เช่น: เปิดฉากด้วย wide shot บรรยากาศสงบ ค่อยๆ zoom เข้าหาตัวละครหลัก..."
+                    className="w-full h-20 bg-black/30 border border-orange-500/20 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-orange-500/50 focus:bg-black/40 outline-none transition-colors resize-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                    AI จะใช้คำสั่งนี้เป็นแนวทางในการขยาย Prompt สำหรับฉากนี้
+                </p>
             </div>
         </div>
     );
