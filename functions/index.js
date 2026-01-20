@@ -1478,18 +1478,50 @@ exports.scheduleJobs = functions.pubsub.schedule('every 1 minutes')
                   const readyPromptRef = await project.ref.collection('readyPrompts').add(readyPromptData);
                   console.log(`      📦 Ready prompt saved: ${readyPromptRef.id}`);
 
-                  // Create Job with COMPLETE scene data
+                  // === BUILD BLOCK SEQUENCE ===
+                  const PLATFORM_TO_UPLOAD_BLOCK = {
+                    'facebook': 'UPLOAD_FACEBOOK',
+                    'youtube': 'UPLOAD_YOUTUBE',
+                    'tiktok': 'UPLOAD_TIKTOK',
+                    'instagram': 'UPLOAD_INSTAGRAM'
+                  };
+
+                  // สร้าง Block Sequence: ADD_SCENE → EXPORT → DOWNLOAD → UPLOAD(s)
+                  const blockSequence = [
+                    'ADD_SCENE_TEXT',   // 🔁 LOOP: ทำซ้ำตาม prompts.length
+                    'EXPORT_VIDEO',     // ⏺ ONCE: Export วิดีโอ
+                    'DOWNLOAD_FILE'     // ⏺ ONCE: Download ไฟล์
+                  ];
+
+                  // เพิ่ม Upload Block ตามที่ User เลือกไว้ใน Posting Schedule
+                  const slotPlatforms = slot.platforms || [];
+                  if (slotPlatforms.length > 0) {
+                    slotPlatforms.forEach(p => {
+                      const uploadBlock = PLATFORM_TO_UPLOAD_BLOCK[p.platformId];
+                      if (uploadBlock) {
+                        blockSequence.push(uploadBlock);
+                      }
+                    });
+                  }
+
+                  console.log(`      🧱 Block Sequence: ${blockSequence.join(' → ')}`);
+
+                  // Create Job with Block Sequence
                   await jobRef.set({
                     projectId: project.id,
                     userId: userId,
-                    recipeId: modeId || 'CMD_OPEN_BROWSER',
+                    blockSequence: blockSequence,
+                    currentBlockIndex: 0,
+                    platforms: slotPlatforms,
                     type: 'SCHEDULED',
                     status: 'PENDING',
                     variables: variableValues,
-                    modeMetadata: modeMetadata, // Mode-level info
-                    scenes: scenes, // Complete scene objects
-                    prompts: prompts, // Simple prompts for backward compatibility
-                    episodeId: episodeData?.id || null, // Link to episode
+                    modeMetadata: modeMetadata,
+                    scenes: scenes,
+                    prompts: prompts,
+                    titles: titlesAndTags?.titles || null,
+                    tags: titlesAndTags?.tags || null,
+                    episodeId: episodeData?.id || null,
                     episodeTitle: episodeData?.title || null,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     scheduledTime: slot.start
@@ -2955,6 +2987,101 @@ exports.getStorageStats = functions
 
     } catch (error) {
       console.error('Get storage stats error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+// ============================================
+// AI BLOCK EDITOR: Chat with AI to edit Blocks
+// ============================================
+exports.aiBlockEditor = functions
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const { message, blockData, chatHistory, editMode } = data;
+    const openai = getOpenAI();
+
+    const systemPrompt = `คุณคือ AI ผู้ช่วยแก้ไข Automation Block สำหรับ Chrome Extension
+คุณต้องพูดคุยกับ Admin เป็นภาษาไทยเพื่อเก็บข้อมูลให้ครบถ้วนก่อนทำการแก้ไข
+
+**หน้าที่ของคุณ:**
+1. ถามคำถามเพื่อเข้าใจปัญหาและความต้องการของ Admin
+2. วิเคราะห์ Block Data ที่ได้รับ
+3. เสนอแนะการแก้ไขที่เหมาะสม
+4. เมื่อ Admin ยืนยัน ให้ส่ง JSON สำหรับแก้ไข Block
+
+**ตัวแปรที่ใช้ได้:**
+- {{prompt}} - ข้อความ Prompt ของซีน
+- {{title}} - ชื่อเรื่อง
+- {{tags}} - แท็ก/คีย์เวิร์ด
+- {{sceneIndex}} - ลำดับของซีน (1, 2, 3...)
+
+**รูปแบบ Block Step:**
+{
+  "action": "click" | "type" | "select",
+  "selector": "CSS selector ของ element",
+  "value": "ข้อความที่จะพิมพ์ (สำหรับ type)",
+  "description": "คำอธิบาย step นี้"
+}
+
+**กฎสำคัญ:**
+- ห้ามเดาการแก้ไข ต้องถามข้อมูลให้ครบก่อน
+- เมื่อพร้อมแก้ไข ให้ส่ง JSON ในรูปแบบ:
+\`\`\`json
+{"action": "UPDATE_BLOCK", "steps": [...], "changes": "สรุปการเปลี่ยนแปลง"}
+\`\`\`
+- ถ้ายังไม่พร้อม ให้ถามคำถามเพิ่มเติม`;
+
+    try {
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Block Data:\n${JSON.stringify(blockData, null, 2)}\n\nEdit Mode: ${editMode}` }
+      ];
+
+      // Add chat history
+      if (chatHistory && Array.isArray(chatHistory)) {
+        chatHistory.forEach(msg => {
+          messages.push({ role: msg.role, content: msg.content });
+        });
+      }
+
+      // Add current message
+      messages.push({ role: 'user', content: message });
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 1500
+      });
+
+      const aiResponse = response.choices[0].message.content;
+
+      // Check if AI wants to update block
+      let updateAction = null;
+      const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          if (parsed.action === 'UPDATE_BLOCK') {
+            updateAction = parsed;
+          }
+        } catch (e) {
+          // JSON parse failed, just return text response
+        }
+      }
+
+      return {
+        success: true,
+        response: aiResponse,
+        updateAction: updateAction
+      };
+
+    } catch (error) {
+      console.error('AI Block Editor error:', error);
       throw new functions.https.HttpsError('internal', error.message);
     }
   });

@@ -131,5 +131,25 @@ service cloud.firestore {
          allow read, write: if true;
        }
     }
+
+    // 🟢 EXTENSION: Global Recipe Blocks (for Block System)
+    match /global_recipe_blocks/{blockId} {
+      allow read, write: if true; // Allow Anonymous Agent to read/write blocks
+    }
+
+    // 🟢 EXTENSION: Recipe Templates (for Template Builder)
+    match /recipe_templates/{templateId} {
+      allow read, write: if true; // Allow Anonymous Agent to read/write templates
+    }
+
+    // 🟢 EXTENSION: Agent Jobs (Collection Group Query)
+    match /agent_jobs/{jobId} {
+      allow read, write: if true; // Allow Anonymous Agent
+    }
+
+    // 🟢 EXTENSION: Allow reading user projects for Agent (key-based auth bypass)
+    match /{path=**}/projects/{projectId} {
+      allow read: if true; // Allow reading projects from any user path
+    }
   }
 }

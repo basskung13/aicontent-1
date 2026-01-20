@@ -4,7 +4,7 @@ import {
     Clock, Users, Video, Eye, Heart, Play, Search, ChevronDown, Filter,
     Facebook, Instagram, Youtube, Loader2, ArrowUpRight, ArrowDownRight,
     ShoppingBag, Gift, DollarSign, Activity, BarChart3, PieChart, Calendar,
-    CheckCircle, AlertCircle, Zap, Target, Award, Sparkles, CalendarDays, CalendarRange
+    CheckCircle, AlertCircle, Zap, Target, Award, Sparkles, CalendarDays, CalendarRange, Download
 } from 'lucide-react';
 import GlassDropdown from '../components/ui/GlassDropdown';
 import { useTranslation } from 'react-i18next';
@@ -312,6 +312,13 @@ export default function Dashboard() {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
+                        <Link
+                            to="/learn?section=extension-update"
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/40 hover:to-blue-600/40 backdrop-blur-xl rounded-xl border border-purple-500/30 hover:border-purple-500/50 text-sm text-purple-300 hover:text-white transition-all group"
+                        >
+                            <Download size={16} className="group-hover:animate-bounce" />
+                            <span className="font-medium">Update Extension</span>
+                        </Link>
                         <div className="px-4 py-2 bg-black/30 backdrop-blur-xl rounded-xl border border-white/10 text-sm text-slate-300">
                             <Calendar size={16} className="inline mr-2 text-orange-400" />
                             {new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

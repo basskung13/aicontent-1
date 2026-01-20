@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, FolderKanban, Settings, LogIn, LogOut, User, Share2, Wand2, ShoppingBag, Shield, Users, Sparkles, Coins, Video, ChevronDown, Mic, Music, Clock } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Settings, LogIn, LogOut, User, Share2, Wand2, ShoppingBag, Shield, Users, Sparkles, Coins, Video, ChevronDown, Mic, Music, Clock, BookOpen, Download } from 'lucide-react';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -19,6 +19,7 @@ import ExpanderCreator from './pages/ExpanderCreator';
 import Payments from './pages/Payments';
 import PodcastCreator from './pages/PodcastCreator';
 import MusicCreator from './pages/MusicCreator';
+import Learn from './pages/Learn';
 
 const SettingsPage = () => (
   <div className="p-8">
@@ -216,6 +217,11 @@ return (
           <SubNavItem to="/podcast-creator" icon={Mic} label="Podcast Creator" />
           <SubNavItem to="/music-creator" icon={Music} label="Music Creator" />
         </NavItemDropdown>
+
+        {/* Learn / Help Section */}
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <NavItem to="/learn" icon={BookOpen} label="เรียนรู้" />
+        </div>
       </nav>
     </aside>
 
@@ -278,6 +284,7 @@ return (
           <Route path="/music-creator" element={<MusicCreator />} />
           {isAdmin && <Route path="/admin" element={<Admin />} />}
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/learn" element={<Learn />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

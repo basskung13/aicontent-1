@@ -210,6 +210,68 @@ if (window.playerInjected) {
                 return true;
             }
 
+            // --- WAIT FOR PROGRESS COMPLETE (tracks %, waits for 100% or disappear) ---
+            if (step.action === 'wait_for_progress_complete') {
+                const progressSelector = step.selector;
+                const timeout = step.timeout || 600000; // 10 minutes default
+                const startTime = Date.now();
+                let lastProgress = '';
+                
+                console.log(`📊 Waiting for progress to complete: ${progressSelector}`);
+                
+                while (Date.now() - startTime < timeout) {
+                    const el = document.querySelector(progressSelector);
+                    
+                    if (!el) {
+                        console.log(`✅ Progress element disappeared - Video complete!`);
+                        return true;
+                    }
+                    
+                    const currentProgress = el.textContent?.trim() || '';
+                    if (currentProgress !== lastProgress) {
+                        console.log(`📊 Progress: ${currentProgress}`);
+                        lastProgress = currentProgress;
+                    }
+                    
+                    // Check if 100%
+                    if (currentProgress.includes('100')) {
+                        console.log(`✅ Progress reached 100% - Video complete!`);
+                        await sleep(2000); // Wait a bit for UI to update
+                        return true;
+                    }
+                    
+                    await sleep(2000); // Check every 2 seconds
+                }
+                
+                console.warn(`⏱️ Timeout waiting for progress to complete`);
+                return false;
+            }
+
+            // --- WAIT FOR ELEMENT AND CLICK (waits for element to appear, then clicks) ---
+            if (step.action === 'wait_for_element_and_click') {
+                const timeout = step.timeout || 600000; // 10 minutes default
+                const startTime = Date.now();
+                
+                console.log(`⏳ Waiting for element to appear and click: ${step.selector}`);
+                
+                while (Date.now() - startTime < timeout) {
+                    try {
+                        const el = document.querySelector(step.selector);
+                        if (el) {
+                            console.log(`✅ Element found! Clicking...`);
+                            el.click();
+                            return true;
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                    await sleep(1000);
+                }
+                
+                console.warn(`⏱️ Timeout waiting for element: ${step.selector}`);
+                return false;
+            }
+
             // --- STANDARD ACTIONS (need element) ---
             const el = await findElement(step.selector);
 
@@ -223,14 +285,27 @@ if (window.playerInjected) {
                 } else {
                     let textToType = step.value || "Test Input";
 
-                    // 🧠 VARIABLE INJECTION LOGIC
+                    // 🧠 VARIABLE INJECTION LOGIC (Enhanced for Multi-Platform)
                     if (typeof textToType === 'string' && textToType.includes('{{')) {
                         console.log(`🧠 Parsing Variables in: "${textToType}"`);
                         Object.keys(variables).forEach(key => {
                             const regex = new RegExp(`{{${key}}}`, 'g');
-                            textToType = textToType.replace(regex, variables[key]);
+                            let value = variables[key];
+                            // Handle arrays (join with comma)
+                            if (Array.isArray(value)) {
+                                value = value.join(', ');
+                            }
+                            // Handle objects (stringify)
+                            else if (typeof value === 'object' && value !== null) {
+                                value = JSON.stringify(value);
+                            }
+                            // Handle null/undefined
+                            else if (value === null || value === undefined) {
+                                value = '';
+                            }
+                            textToType = textToType.replace(regex, String(value));
                         });
-                        console.log(`🧠 Result: "${textToType}"`);
+                        console.log(`🧠 Result: "${textToType.substring(0, 100)}..."`);
                     }
 
                     el.value = textToType;
@@ -246,8 +321,133 @@ if (window.playerInjected) {
         }
     };
 
+    // --- HELPER: Show Step Overlay (Yellow Banner) ---
+    const showStepOverlay = (info) => {
+        // Remove existing overlay
+        const existing = document.getElementById('agent-step-overlay');
+        if (existing) existing.remove();
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'agent-step-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 999999;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.3s ease-out;
+        `;
+
+        // Add animation style
+        if (!document.getElementById('agent-overlay-style')) {
+            const style = document.createElement('style');
+            style.id = 'agent-overlay-style';
+            style.textContent = `
+                @keyframes slideDown {
+                    from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+                    to { transform: translateX(-50%) translateY(0); opacity: 1; }
+                }
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Content
+        const blockInfo = info.blockName ? `[${info.blockIndex + 1}/${info.totalBlocks}] ${info.blockName}` : '';
+        overlay.innerHTML = `
+            <span style="animation: pulse 1s infinite;">🧪</span>
+            <span>ทดสอบ: ${blockInfo}</span>
+            <span style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 4px;">
+                Step ${info.stepIndex + 1}/${info.totalSteps}
+            </span>
+            <span style="font-weight: normal; font-size: 12px;">${info.action || ''}</span>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Auto-remove after 2 seconds
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                overlay.style.opacity = '0';
+                overlay.style.transition = 'opacity 0.3s';
+                setTimeout(() => overlay.remove(), 300);
+            }
+        }, 2000);
+    };
+
+    // --- HELPER: Highlight Element with Yellow Border ---
+    const highlightElement = (el) => {
+        if (!el) return;
+        
+        const originalOutline = el.style.outline;
+        const originalTransition = el.style.transition;
+        
+        el.style.outline = '4px solid #fbbf24';
+        el.style.transition = 'outline 0.2s ease-out';
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        setTimeout(() => {
+            el.style.outline = originalOutline;
+            el.style.transition = originalTransition;
+        }, 1500);
+    };
+
     // --- LISTENER ---
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        // Handle EXECUTE_STEP_WITH_HIGHLIGHT for testing
+        if (request.action === "EXECUTE_STEP_WITH_HIGHLIGHT") {
+            const step = request.step;
+            console.log(`🧪 Test Step ${request.stepIndex + 1}/${request.totalSteps}:`, step);
+
+            // Show overlay banner
+            showStepOverlay({
+                stepIndex: request.stepIndex,
+                totalSteps: request.totalSteps,
+                blockName: request.blockName,
+                blockIndex: request.blockIndex || 0,
+                totalBlocks: request.totalBlocks || 1,
+                action: `${step.action} → ${step.selector?.substring(0, 30) || 'N/A'}...`
+            });
+
+            (async () => {
+                try {
+                    // Find and highlight element first
+                    if (step.selector) {
+                        try {
+                            const el = await findElement(step.selector, 5000);
+                            highlightElement(el);
+                        } catch (e) {
+                            console.warn('Element not found for highlight:', step.selector);
+                        }
+                    }
+
+                    // Execute the step
+                    await executeStep(step, {});
+                    sendResponse({ success: true });
+                } catch (err) {
+                    console.error('Step execution error:', err);
+                    sendResponse({ success: false, error: err.message });
+                }
+            })();
+
+            return true; // Keep channel open for async response
+        }
+
         if (request.action === "EXECUTE_RECIPE") {
             const recipe = request.recipe || {};
             const steps = recipe.steps || [];
