@@ -2442,18 +2442,78 @@ exports.cleanupExpiredTestLogs = functions.pubsub.schedule('0 2 * * *')
   });
 
 // ============================================
-// CLEANUP FUNCTION: Delete old episodeHistory (older than 30 days)
-// Runs weekly on Sunday at 3:00 AM UTC
+// CLEANUP FUNCTION: Delete old episodeHistory (older than 7 days)
+// WITH BACKUP: Saves to deletedBackups/ before deletion
+// Runs daily at 3:00 AM UTC
 // ============================================
-exports.cleanupOldEpisodeHistory = functions.pubsub.schedule('0 3 * * 0')
+exports.cleanupOldEpisodeHistory = functions.pubsub.schedule('0 3 * * *')
   .timeZone('UTC')
   .onRun(async (context) => {
     const db = admin.firestore();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(thirtyDaysAgo);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
     
-    console.log('🧹 Starting cleanup of old episodeHistory (>30 days)...');
+    console.log('🧹 Starting cleanup of old episodeHistory (>7 days)...');
+    
+    try {
+      const usersSnap = await db.collection('users').get();
+      let totalDeleted = 0;
+      let totalBackedUp = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const projectsSnap = await userDoc.ref.collection('projects').get();
+        
+        for (const projectDoc of projectsSnap.docs) {
+          const oldHistory = await projectDoc.ref.collection('episodeHistory')
+            .where('usedAt', '<', cutoffTimestamp)
+            .get();
+          
+          if (!oldHistory.empty) {
+            // BACKUP before delete
+            const backupData = oldHistory.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data(),
+              deletedAt: admin.firestore.FieldValue.serverTimestamp()
+            }));
+            
+            await projectDoc.ref.collection('deletedBackups').add({
+              type: 'episodeHistory',
+              count: oldHistory.size,
+              data: backupData,
+              backedUpAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            totalBackedUp += oldHistory.size;
+
+            // Delete
+            const batch = db.batch();
+            oldHistory.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            totalDeleted += oldHistory.size;
+            console.log(`   Backed up & deleted ${oldHistory.size} history entries from project ${projectDoc.id}`);
+          }
+        }
+      }
+      
+      console.log(`✅ History cleanup complete: Backed up ${totalBackedUp}, Deleted ${totalDeleted}`);
+    } catch (error) {
+      console.error('❌ History cleanup error:', error);
+    }
+  });
+
+// ============================================
+// CLEANUP FUNCTION: Delete old logs (older than 7 days)
+// Runs daily at 3:30 AM UTC
+// ============================================
+exports.cleanupOldLogs = functions.pubsub.schedule('30 3 * * *')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const db = admin.firestore();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+    
+    console.log('🧹 Starting cleanup of old logs (>7 days)...');
     
     try {
       const usersSnap = await db.collection('users').get();
@@ -2463,24 +2523,159 @@ exports.cleanupOldEpisodeHistory = functions.pubsub.schedule('0 3 * * 0')
         const projectsSnap = await userDoc.ref.collection('projects').get();
         
         for (const projectDoc of projectsSnap.docs) {
-          // Find old history entries
-          const oldHistory = await projectDoc.ref.collection('episodeHistory')
-            .where('usedAt', '<', cutoffTimestamp)
+          const oldLogs = await projectDoc.ref.collection('logs')
+            .where('timestamp', '<', cutoffTimestamp)
             .get();
           
-          if (!oldHistory.empty) {
+          if (!oldLogs.empty) {
             const batch = db.batch();
-            oldHistory.docs.forEach(doc => batch.delete(doc.ref));
+            oldLogs.docs.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
-            totalDeleted += oldHistory.size;
-            console.log(`   Deleted ${oldHistory.size} old history entries from project ${projectDoc.id}`);
+            totalDeleted += oldLogs.size;
+            console.log(`   Deleted ${oldLogs.size} old logs from project ${projectDoc.id}`);
           }
         }
       }
       
-      console.log(`✅ History cleanup complete: Deleted ${totalDeleted} old entries`);
+      console.log(`✅ Logs cleanup complete: Deleted ${totalDeleted} old entries`);
     } catch (error) {
-      console.error('❌ History cleanup error:', error);
+      console.error('❌ Logs cleanup error:', error);
+    }
+  });
+
+// ============================================
+// CLEANUP FUNCTION: Delete old readyPrompts (older than 7 days)
+// Runs daily at 4:00 AM UTC
+// ============================================
+exports.cleanupOldReadyPrompts = functions.pubsub.schedule('0 4 * * *')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const db = admin.firestore();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+    
+    console.log('🧹 Starting cleanup of old readyPrompts (>7 days)...');
+    
+    try {
+      const usersSnap = await db.collection('users').get();
+      let totalDeleted = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const projectsSnap = await userDoc.ref.collection('projects').get();
+        
+        for (const projectDoc of projectsSnap.docs) {
+          const oldPrompts = await projectDoc.ref.collection('readyPrompts')
+            .where('createdAt', '<', cutoffTimestamp)
+            .get();
+          
+          if (!oldPrompts.empty) {
+            const batch = db.batch();
+            oldPrompts.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            totalDeleted += oldPrompts.size;
+            console.log(`   Deleted ${oldPrompts.size} old readyPrompts from project ${projectDoc.id}`);
+          }
+        }
+      }
+      
+      console.log(`✅ ReadyPrompts cleanup complete: Deleted ${totalDeleted} old entries`);
+    } catch (error) {
+      console.error('❌ ReadyPrompts cleanup error:', error);
+    }
+  });
+
+// ============================================
+// CLEANUP FUNCTION: Delete old completed jobs (older than 7 days)
+// Runs daily at 4:30 AM UTC
+// ============================================
+exports.cleanupOldJobs = functions.pubsub.schedule('30 4 * * *')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const db = admin.firestore();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+    
+    console.log('🧹 Starting cleanup of old jobs (>7 days)...');
+    
+    try {
+      // Jobs are at root level: jobs/{jobId}
+      const oldJobs = await db.collection('jobs')
+        .where('createdAt', '<', cutoffTimestamp)
+        .get();
+      
+      if (!oldJobs.empty) {
+        let totalDeleted = 0;
+        const batchSize = 500;
+        const batches = [];
+        let currentBatch = db.batch();
+        let count = 0;
+
+        oldJobs.docs.forEach(doc => {
+          currentBatch.delete(doc.ref);
+          count++;
+          if (count >= batchSize) {
+            batches.push(currentBatch);
+            currentBatch = db.batch();
+            count = 0;
+          }
+        });
+        if (count > 0) batches.push(currentBatch);
+
+        for (const batch of batches) {
+          await batch.commit();
+        }
+        totalDeleted = oldJobs.size;
+        console.log(`✅ Jobs cleanup complete: Deleted ${totalDeleted} old jobs`);
+      } else {
+        console.log('✅ Jobs cleanup complete: No old jobs to delete');
+      }
+    } catch (error) {
+      console.error('❌ Jobs cleanup error:', error);
+    }
+  });
+
+// ============================================
+// CLEANUP FUNCTION: Delete used episodes (status: 'used', older than 7 days)
+// Runs daily at 5:00 AM UTC
+// ============================================
+exports.cleanupUsedEpisodes = functions.pubsub.schedule('0 5 * * *')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const db = admin.firestore();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+    
+    console.log('🧹 Starting cleanup of used episodes (>7 days)...');
+    
+    try {
+      const usersSnap = await db.collection('users').get();
+      let totalDeleted = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const projectsSnap = await userDoc.ref.collection('projects').get();
+        
+        for (const projectDoc of projectsSnap.docs) {
+          const usedEpisodes = await projectDoc.ref.collection('episodes')
+            .where('status', '==', 'used')
+            .where('usedAt', '<', cutoffTimestamp)
+            .get();
+          
+          if (!usedEpisodes.empty) {
+            const batch = db.batch();
+            usedEpisodes.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            totalDeleted += usedEpisodes.size;
+            console.log(`   Deleted ${usedEpisodes.size} used episodes from project ${projectDoc.id}`);
+          }
+        }
+      }
+      
+      console.log(`✅ Used episodes cleanup complete: Deleted ${totalDeleted} old entries`);
+    } catch (error) {
+      console.error('❌ Used episodes cleanup error:', error);
     }
   });
 
@@ -2533,5 +2728,234 @@ exports.autoGenerateEpisodes = functions
     }
 
     return result;
+  });
+
+// ============================================
+// MANUAL CLEANUP: Callable function for Admin
+// Allows manual trigger of cleanup for a specific project
+// ============================================
+exports.manualCleanup = functions
+  .runWith({ timeoutSeconds: 300, memory: '1GB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const db = admin.firestore();
+    const { allProjects, projectId, userId, targets = ['all'] } = data;
+    // targets: ['logs', 'testLogs', 'readyPrompts', 'episodeHistory', 'usedEpisodes', 'all']
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+    const shouldClean = (target) => targets.includes('all') || targets.includes(target);
+
+    // Helper function to cleanup a single project
+    const cleanupProject = async (targetUserId, targetProjectId) => {
+      const projectRef = db.collection('users').doc(targetUserId).collection('projects').doc(targetProjectId);
+      const results = { logs: 0, testLogs: 0, readyPrompts: 0, episodeHistory: 0, usedEpisodes: 0, backedUp: 0 };
+
+      // 1. Cleanup logs
+      if (shouldClean('logs')) {
+        const oldLogs = await projectRef.collection('logs').where('timestamp', '<', cutoffTimestamp).get();
+        if (!oldLogs.empty) {
+          const batch = db.batch();
+          oldLogs.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+          results.logs = oldLogs.size;
+        }
+      }
+      // 2. Cleanup testLogs
+      if (shouldClean('testLogs')) {
+        const now = admin.firestore.Timestamp.now();
+        const expiredLogs = await projectRef.collection('testLogs').where('expiresAt', '<', now).get();
+        if (!expiredLogs.empty) {
+          const batch = db.batch();
+          expiredLogs.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+          results.testLogs = expiredLogs.size;
+        }
+      }
+      // 3. Cleanup readyPrompts
+      if (shouldClean('readyPrompts')) {
+        const oldPrompts = await projectRef.collection('readyPrompts').where('createdAt', '<', cutoffTimestamp).get();
+        if (!oldPrompts.empty) {
+          const batch = db.batch();
+          oldPrompts.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+          results.readyPrompts = oldPrompts.size;
+        }
+      }
+      // 4. Cleanup episodeHistory
+      if (shouldClean('episodeHistory')) {
+        const oldHistory = await projectRef.collection('episodeHistory').where('usedAt', '<', cutoffTimestamp).get();
+        if (!oldHistory.empty) {
+          const batch = db.batch();
+          oldHistory.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+          results.episodeHistory = oldHistory.size;
+        }
+      }
+      // 5. Cleanup used episodes
+      if (shouldClean('usedEpisodes')) {
+        const usedEpisodes = await projectRef.collection('episodes').where('status', '==', 'used').where('usedAt', '<', cutoffTimestamp).get();
+        if (!usedEpisodes.empty) {
+          const batch = db.batch();
+          usedEpisodes.docs.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+          results.usedEpisodes = usedEpisodes.size;
+        }
+      }
+      return results;
+    };
+
+    try {
+      // Mode: All Projects
+      if (allProjects && Array.isArray(allProjects)) {
+        const totals = { logs: 0, testLogs: 0, readyPrompts: 0, episodeHistory: 0, usedEpisodes: 0, projectsCleaned: 0 };
+        for (const proj of allProjects) {
+          try {
+            const r = await cleanupProject(proj.userId, proj.projectId);
+            totals.logs += r.logs;
+            totals.testLogs += r.testLogs;
+            totals.readyPrompts += r.readyPrompts;
+            totals.episodeHistory += r.episodeHistory;
+            totals.usedEpisodes += r.usedEpisodes;
+            totals.projectsCleaned++;
+          } catch (e) { /* skip invalid */ }
+        }
+        const totalDeleted = totals.logs + totals.testLogs + totals.readyPrompts + totals.episodeHistory + totals.usedEpisodes;
+        return { success: true, deleted: totals, message: `ล้างทุกโปรเจค (${totals.projectsCleaned}) เสร็จสิ้น ลบทั้งหมด ${totalDeleted} รายการ` };
+      }
+
+      // Mode: Single Project
+      const targetUserId = userId || context.auth.uid;
+      if (!projectId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing projectId');
+      }
+      const projectRef = db.collection('users').doc(targetUserId).collection('projects').doc(projectId);
+      const projectDoc = await projectRef.get();
+      if (!projectDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Project not found');
+      }
+
+      const results = await cleanupProject(targetUserId, projectId);
+
+      // Log the manual cleanup
+      await projectRef.collection('logs').add({
+        message: `🧹 Manual Cleanup: Deleted ${results.logs + results.testLogs + results.readyPrompts + results.episodeHistory + results.usedEpisodes} items`,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        platform: 'SYSTEM',
+        type: 'cleanup',
+        details: results
+      });
+
+      return {
+        success: true,
+        deleted: results,
+        message: `Cleanup completed. Total deleted: ${Object.values(results).reduce((a, b) => a + b, 0)}`
+      };
+
+    } catch (error) {
+      console.error('Manual cleanup error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+// ============================================
+// STORAGE STATS: Get document counts for Admin Dashboard
+// ============================================
+exports.getStorageStats = functions
+  .runWith({ timeoutSeconds: 120, memory: '512MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const db = admin.firestore();
+    const { allProjects, projectId, userId } = data;
+
+    // Helper function to get stats for a single project
+    const getProjectStats = async (targetUserId, targetProjectId) => {
+      const projectRef = db.collection('users').doc(targetUserId).collection('projects').doc(targetProjectId);
+      const [episodesSnap, episodeHistorySnap, logsSnap, testLogsSnap, readyPromptsSnap, slotsSnap, deletedBackupsSnap] = await Promise.all([
+        projectRef.collection('episodes').get(),
+        projectRef.collection('episodeHistory').get(),
+        projectRef.collection('logs').get(),
+        projectRef.collection('testLogs').get(),
+        projectRef.collection('readyPrompts').get(),
+        projectRef.collection('slots').get(),
+        projectRef.collection('deletedBackups').get()
+      ]);
+
+      let pendingEpisodes = 0, usedEpisodes = 0, oldLogs = 0, oldHistory = 0;
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      episodesSnap.docs.forEach(doc => {
+        if (doc.data().status === 'pending') pendingEpisodes++;
+        else if (doc.data().status === 'used') usedEpisodes++;
+      });
+      logsSnap.docs.forEach(doc => {
+        const ts = doc.data().timestamp?.toDate?.();
+        if (ts && ts < sevenDaysAgo) oldLogs++;
+      });
+      episodeHistorySnap.docs.forEach(doc => {
+        const ts = doc.data().usedAt?.toDate?.();
+        if (ts && ts < sevenDaysAgo) oldHistory++;
+      });
+
+      return {
+        episodes: { total: episodesSnap.size, pending: pendingEpisodes, used: usedEpisodes },
+        episodeHistory: { total: episodeHistorySnap.size, oldItems: oldHistory },
+        logs: { total: logsSnap.size, oldItems: oldLogs },
+        testLogs: testLogsSnap.size,
+        readyPrompts: readyPromptsSnap.size,
+        slots: slotsSnap.size,
+        deletedBackups: deletedBackupsSnap.size,
+        cleanup: { logs: oldLogs, episodeHistory: oldHistory, usedEpisodes }
+      };
+    };
+
+    try {
+      // Mode: All Projects (aggregate stats)
+      if (allProjects && Array.isArray(allProjects)) {
+        const totals = { episodes: { total: 0, pending: 0, used: 0 }, episodeHistory: { total: 0, oldItems: 0 }, logs: { total: 0, oldItems: 0 }, testLogs: 0, readyPrompts: 0, slots: 0, deletedBackups: 0 };
+        const cleanup = { logs: 0, episodeHistory: 0, usedEpisodes: 0 };
+
+        for (const proj of allProjects) {
+          try {
+            const stats = await getProjectStats(proj.userId, proj.projectId);
+            totals.episodes.total += stats.episodes.total;
+            totals.episodes.pending += stats.episodes.pending;
+            totals.episodes.used += stats.episodes.used;
+            totals.episodeHistory.total += stats.episodeHistory.total;
+            totals.episodeHistory.oldItems += stats.episodeHistory.oldItems;
+            totals.logs.total += stats.logs.total;
+            totals.logs.oldItems += stats.logs.oldItems;
+            totals.testLogs += stats.testLogs;
+            totals.readyPrompts += stats.readyPrompts;
+            totals.slots += stats.slots;
+            totals.deletedBackups += stats.deletedBackups;
+            cleanup.logs += stats.cleanup.logs;
+            cleanup.episodeHistory += stats.cleanup.episodeHistory;
+            cleanup.usedEpisodes += stats.cleanup.usedEpisodes;
+          } catch (e) { /* skip invalid projects */ }
+        }
+        return { success: true, stats: totals, cleanupEstimate: cleanup, projectCount: allProjects.length };
+      }
+
+      // Mode: Single Project
+      const targetUserId = userId || context.auth.uid;
+      if (!projectId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing projectId');
+      }
+      const stats = await getProjectStats(targetUserId, projectId);
+      return { success: true, stats, cleanupEstimate: stats.cleanup };
+
+    } catch (error) {
+      console.error('Get storage stats error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
   });
 

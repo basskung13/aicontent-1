@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth } from '../firebase';
+import { db, auth, functions } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, setDoc, increment, getDoc, getDocs, runTransaction } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { onAuthStateChanged } from 'firebase/auth';
-import { CheckCircle, XCircle, ExternalLink, Clock, Loader2, TrendingUp, TrendingDown, Users, Wallet, CreditCard, ArrowUpRight, ArrowDownRight, Edit3, DollarSign, BarChart3, Building2 } from 'lucide-react';
+import { CheckCircle, XCircle, ExternalLink, Clock, Loader2, TrendingUp, TrendingDown, Users, Wallet, CreditCard, ArrowUpRight, ArrowDownRight, Edit3, DollarSign, BarChart3, Building2, Database, Trash2, RefreshCw, HardDrive } from 'lucide-react';
 import GlassDropdown from '../components/ui/GlassDropdown';
 
 const Admin = () => {
     const [currentUser, setCurrentUser] = useState(null);
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [creditSubTab, setCreditSubTab] = useState('deposits'); // deposits, withdrawals, manager
 
     // Payments
     const [paymentRequests, setPaymentRequests] = useState([]);
@@ -34,6 +36,13 @@ const Admin = () => {
     const [activitySearch, setActivitySearch] = useState('');
     const [activityTypeFilter, setActivityTypeFilter] = useState('all');
     const [activityApproverFilter, setActivityApproverFilter] = useState('all');
+
+    // Storage Dashboard
+    const [storageStats, setStorageStats] = useState(null);
+    const [loadingStorage, setLoadingStorage] = useState(false);
+    const [cleaningUp, setCleaningUp] = useState(false);
+    const [selectedProjectForStorage, setSelectedProjectForStorage] = useState('');
+    const [userProjects, setUserProjects] = useState([]);
 
     // Helper: แสดง Admin แทน email
     const formatApprover = (email) => {
@@ -434,12 +443,106 @@ const Admin = () => {
         return { totalDeposit, totalWithdraw, depositCount: deposits.length, withdrawCount: withdrawals.length };
     };
 
-    // Tab Components
+    // Fetch ALL user projects for storage dashboard (Admin sees all)
+    useEffect(() => {
+        if (!currentUser) return;
+        const fetchAllProjects = async () => {
+            try {
+                const allProjects = [];
+                const usersSnap = await getDocs(collection(db, 'users'));
+                for (const userDoc of usersSnap.docs) {
+                    const userEmail = userDoc.data().email || userDoc.id;
+                    const projectsSnap = await getDocs(collection(db, 'users', userDoc.id, 'projects'));
+                    projectsSnap.docs.forEach(d => {
+                        allProjects.push({
+                            id: d.id,
+                            userId: userDoc.id,
+                            name: d.data().name || d.id,
+                            userEmail: userEmail,
+                            label: `${d.data().name || d.id} (${userEmail.split('@')[0]})`
+                        });
+                    });
+                }
+                // เพิ่มตัวเลือก "ทุกโปรเจค" ที่หัวลิสต์
+                const allOption = { id: 'all', userId: 'all', name: '📊 ทุกโปรเจค', label: '📊 ทุกโปรเจค (ล้างทั้งหมด)', isAll: true };
+                setUserProjects([allOption, ...allProjects]);
+                if (!selectedProjectForStorage) {
+                    setSelectedProjectForStorage(JSON.stringify({ userId: 'all', projectId: 'all' }));
+                }
+            } catch (err) {
+                console.error('Fetch all projects error:', err);
+            }
+        };
+        fetchAllProjects();
+    }, [currentUser]);
+
+    // Fetch storage stats
+    const fetchStorageStats = async () => {
+        if (!selectedProjectForStorage) return;
+        setLoadingStorage(true);
+        try {
+            const parsed = JSON.parse(selectedProjectForStorage);
+            const getStorageStats = httpsCallable(functions, 'getStorageStats');
+            // ส่ง allProjects ถ้าเลือก "ทุกโปรเจค"
+            if (parsed.projectId === 'all') {
+                const projectsList = userProjects.filter(p => !p.isAll).map(p => ({ userId: p.userId, projectId: p.id }));
+                const result = await getStorageStats({ allProjects: projectsList });
+                setStorageStats(result.data);
+            } else {
+                const result = await getStorageStats({ projectId: parsed.projectId, userId: parsed.userId });
+                setStorageStats(result.data);
+            }
+        } catch (err) {
+            console.error('Get storage stats error:', err);
+            alert('เกิดข้อผิดพลาด: ' + err.message);
+        } finally {
+            setLoadingStorage(false);
+        }
+    };
+
+    // Manual cleanup handler
+    const handleManualCleanup = async (targets = ['all']) => {
+        if (!selectedProjectForStorage) return;
+        const parsed = JSON.parse(selectedProjectForStorage);
+        const isAllProjects = parsed.projectId === 'all';
+        const confirmMsg = isAllProjects 
+            ? `⚠️ ยืนยันการล้างข้อมูลเก่า (> 7 วัน) สำหรับ ทุกโปรเจค (${userProjects.length - 1} โปรเจค)?`
+            : `ยืนยันการล้างข้อมูลเก่า (> 7 วัน) สำหรับ ${targets.join(', ')}?`;
+        if (!confirm(confirmMsg)) return;
+        
+        setCleaningUp(true);
+        try {
+            const manualCleanup = httpsCallable(functions, 'manualCleanup');
+            // ส่ง allProjects ถ้าเลือก "ทุกโปรเจค"
+            if (isAllProjects) {
+                const projectsList = userProjects.filter(p => !p.isAll).map(p => ({ userId: p.userId, projectId: p.id }));
+                const result = await manualCleanup({ allProjects: projectsList, targets });
+                alert(`✅ ${result.data.message}`);
+            } else {
+                const result = await manualCleanup({ projectId: parsed.projectId, userId: parsed.userId, targets });
+                alert(`✅ ${result.data.message}`);
+            }
+            fetchStorageStats(); // Refresh stats
+        } catch (err) {
+            console.error('Manual cleanup error:', err);
+            alert('เกิดข้อผิดพลาด: ' + err.message);
+        } finally {
+            setCleaningUp(false);
+        }
+    };
+
+    // Tab Components - Main tabs only
     const tabs = [
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-        { id: 'deposits', label: 'อนุมัติเติมเงิน', icon: ArrowUpRight },
-        { id: 'withdrawals', label: 'อนุมัติถอนเงิน', icon: ArrowDownRight },
-        { id: 'credit-manager', label: 'Credit Manager', icon: Users }
+        { id: 'credit', label: 'เครดิต', icon: CreditCard },
+        { id: 'storage', label: 'Storage', icon: Database }
+    ];
+
+    // Credit Sub-tabs
+    const creditSubTabs = [
+        { id: 'deposits', label: 'เติมเงิน', icon: ArrowUpRight },
+        { id: 'withdrawals', label: 'ถอนเงิน', icon: ArrowDownRight },
+        { id: 'manager', label: 'Credit Manager', icon: Users }
     ];
 
     return (
@@ -476,30 +579,64 @@ const Admin = () => {
 
             {/* Tab Navigation */}
             <div className="max-w-7xl mx-auto mb-8 relative">
-                <div className="inline-flex flex-wrap gap-2 bg-black/40 backdrop-blur-xl p-2 rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
-                    {tabs.map((tab, index) => {
-                        const Icon = tab.icon;
-                        const isActive = activeTab === tab.id;
-                        const pendingCount = tab.id === 'deposits' ? stats.pendingDeposits : tab.id === 'withdrawals' ? stats.pendingWithdrawals : 0;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`group relative flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
-                                    isActive 
-                                        ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/40' 
-                                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                                }`}
-                            >
-                                <Icon size={20} className={`transition-transform duration-300 ${isActive ? '' : 'group-hover:rotate-12'}`} />
-                                {tab.label}
-                                {pendingCount > 0 && (
-                                    <span className="bg-yellow-400 text-black text-xs font-black px-2.5 py-1 rounded-full animate-pulse shadow-lg shadow-yellow-500/50">{pendingCount}</span>
-                                )}
-                                {isActive && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
-                            </button>
-                        );
-                    })}
+                {/* Main Tabs + Sub-Tabs in one container */}
+                <div className="bg-black/40 backdrop-blur-xl p-2 rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
+                    {/* Main Tabs Row */}
+                    <div className="inline-flex flex-wrap gap-2">
+                        {tabs.map((tab) => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === tab.id;
+                            const pendingCount = tab.id === 'credit' ? (stats.pendingDeposits + stats.pendingWithdrawals) : 0;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`group relative flex items-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all duration-300 whitespace-nowrap ${
+                                        isActive 
+                                            ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/40' 
+                                            : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                                    }`}
+                                >
+                                    <Icon size={20} className={`transition-transform duration-300 ${isActive ? '' : 'group-hover:rotate-12'}`} />
+                                    {tab.label}
+                                    {pendingCount > 0 && (
+                                        <span className="bg-yellow-400 text-black text-xs font-black px-2.5 py-1 rounded-full animate-pulse shadow-lg shadow-yellow-500/50">{pendingCount}</span>
+                                    )}
+                                    {isActive && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Credit Sub-Tabs Row - แสดงใต้ Main Tabs */}
+                    {activeTab === 'credit' && (
+                        <div className="mt-2 pt-2 border-t border-white/10">
+                            <div className="inline-flex gap-1 bg-white/5 p-1.5 rounded-xl">
+                                {creditSubTabs.map((sub) => {
+                                    const SubIcon = sub.icon;
+                                    const isSubActive = creditSubTab === sub.id;
+                                    const subPending = sub.id === 'deposits' ? stats.pendingDeposits : sub.id === 'withdrawals' ? stats.pendingWithdrawals : 0;
+                                    return (
+                                        <button
+                                            key={sub.id}
+                                            onClick={() => setCreditSubTab(sub.id)}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                                isSubActive 
+                                                    ? 'bg-white/15 text-white border border-white/20' 
+                                                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                            }`}
+                                        >
+                                            <SubIcon size={16} />
+                                            {sub.label}
+                                            {subPending > 0 && (
+                                                <span className="bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full">{subPending}</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -680,7 +817,7 @@ const Admin = () => {
                 )}
 
                 {/* Deposits Tab */}
-                {activeTab === 'deposits' && (
+                {activeTab === 'credit' && creditSubTab === 'deposits' && (
                     <div className="relative bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 shadow-2xl overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500" />
                         <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/10 rounded-full blur-3xl" />
@@ -792,7 +929,7 @@ const Admin = () => {
                 )}
 
                 {/* Withdrawals Tab */}
-                {activeTab === 'withdrawals' && (
+                {activeTab === 'credit' && creditSubTab === 'withdrawals' && (
                     <div className="relative bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 shadow-2xl overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500" />
                         <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/10 rounded-full blur-3xl" />
@@ -903,7 +1040,7 @@ const Admin = () => {
                 )}
 
                 {/* Credit Manager Tab */}
-                {activeTab === 'credit-manager' && (
+                {activeTab === 'credit' && creditSubTab === 'manager' && (
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                         <div className="xl:col-span-2 relative bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 shadow-2xl overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500" />
@@ -1011,6 +1148,200 @@ const Admin = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {/* Storage Dashboard Tab */}
+                {activeTab === 'storage' && (
+                    <div className="space-y-6">
+                        {/* Project Selector & Actions */}
+                        <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+                            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                                        <HardDrive className="text-white" size={24} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">Storage Dashboard</h2>
+                                        <p className="text-slate-400 text-sm">จัดการพื้นที่จัดเก็บข้อมูล Firestore</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-3 items-center">
+                                    <select
+                                        value={selectedProjectForStorage}
+                                        onChange={(e) => setSelectedProjectForStorage(e.target.value)}
+                                        className="bg-black/40 border border-white/20 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-cyan-500 min-w-[200px]"
+                                    >
+                                        {userProjects.map(p => (
+                                            <option key={`${p.userId}-${p.id}`} value={JSON.stringify({ userId: p.userId, projectId: p.id })}>{p.label}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={fetchStorageStats}
+                                        disabled={loadingStorage}
+                                        className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-all disabled:opacity-50"
+                                    >
+                                        {loadingStorage ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                                        โหลดข้อมูล
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Stats Grid */}
+                        {storageStats && (
+                            <>
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                                    {/* Episodes */}
+                                    <div className="bg-gradient-to-br from-green-600/20 to-green-900/10 backdrop-blur-xl rounded-2xl border border-green-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                                                <Database className="text-green-400" size={16} />
+                                            </div>
+                                            <span className="text-green-400 text-xs font-bold uppercase">Episodes</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.episodes.total}</p>
+                                        <p className="text-xs text-green-300">Pending: {storageStats.stats.episodes.pending}</p>
+                                        <p className="text-xs text-red-300">Used: {storageStats.stats.episodes.used}</p>
+                                    </div>
+
+                                    {/* Episode History */}
+                                    <div className="bg-gradient-to-br from-blue-600/20 to-blue-900/10 backdrop-blur-xl rounded-2xl border border-blue-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                                <Clock className="text-blue-400" size={16} />
+                                            </div>
+                                            <span className="text-blue-400 text-xs font-bold uppercase">History</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.episodeHistory.total}</p>
+                                        <p className="text-xs text-yellow-300">Old (&gt;7d): {storageStats.stats.episodeHistory.oldItems}</p>
+                                    </div>
+
+                                    {/* Logs */}
+                                    <div className="bg-gradient-to-br from-purple-600/20 to-purple-900/10 backdrop-blur-xl rounded-2xl border border-purple-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                                <BarChart3 className="text-purple-400" size={16} />
+                                            </div>
+                                            <span className="text-purple-400 text-xs font-bold uppercase">Logs</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.logs.total}</p>
+                                        <p className="text-xs text-yellow-300">Old (&gt;7d): {storageStats.stats.logs.oldItems}</p>
+                                    </div>
+
+                                    {/* Test Logs */}
+                                    <div className="bg-gradient-to-br from-orange-600/20 to-orange-900/10 backdrop-blur-xl rounded-2xl border border-orange-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                                                <ExternalLink className="text-orange-400" size={16} />
+                                            </div>
+                                            <span className="text-orange-400 text-xs font-bold uppercase">Test Logs</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.testLogs}</p>
+                                        <p className="text-xs text-slate-400">TTL: 7 days</p>
+                                    </div>
+
+                                    {/* Ready Prompts */}
+                                    <div className="bg-gradient-to-br from-pink-600/20 to-pink-900/10 backdrop-blur-xl rounded-2xl border border-pink-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                                                <Edit3 className="text-pink-400" size={16} />
+                                            </div>
+                                            <span className="text-pink-400 text-xs font-bold uppercase">Prompts</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.readyPrompts}</p>
+                                        <p className="text-xs text-slate-400">Ready Prompts</p>
+                                    </div>
+
+                                    {/* Slots */}
+                                    <div className="bg-gradient-to-br from-cyan-600/20 to-cyan-900/10 backdrop-blur-xl rounded-2xl border border-cyan-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                                                <Clock className="text-cyan-400" size={16} />
+                                            </div>
+                                            <span className="text-cyan-400 text-xs font-bold uppercase">Slots</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.slots}</p>
+                                        <p className="text-xs text-slate-400">Time Slots</p>
+                                    </div>
+
+                                    {/* Backups */}
+                                    <div className="bg-gradient-to-br from-slate-600/20 to-slate-900/10 backdrop-blur-xl rounded-2xl border border-slate-500/20 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-slate-500/20 flex items-center justify-center">
+                                                <HardDrive className="text-slate-400" size={16} />
+                                            </div>
+                                            <span className="text-slate-400 text-xs font-bold uppercase">Backups</span>
+                                        </div>
+                                        <p className="text-2xl font-black text-white">{storageStats.stats.deletedBackups}</p>
+                                        <p className="text-xs text-slate-400">Deleted Backups</p>
+                                    </div>
+                                </div>
+
+                                {/* Cleanup Actions */}
+                                <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+                                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                        <Trash2 className="text-red-400" size={20} />
+                                        Manual Cleanup (ลบข้อมูลเก่ากว่า 7 วัน)
+                                    </h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                                        <button
+                                            onClick={() => handleManualCleanup(['logs'])}
+                                            disabled={cleaningUp}
+                                            className="px-4 py-3 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 text-purple-300 rounded-xl transition-all disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            🧹 Logs ({storageStats.cleanupEstimate.logs})
+                                        </button>
+                                        <button
+                                            onClick={() => handleManualCleanup(['episodeHistory'])}
+                                            disabled={cleaningUp}
+                                            className="px-4 py-3 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-blue-300 rounded-xl transition-all disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            🧹 History ({storageStats.cleanupEstimate.episodeHistory})
+                                        </button>
+                                        <button
+                                            onClick={() => handleManualCleanup(['usedEpisodes'])}
+                                            disabled={cleaningUp}
+                                            className="px-4 py-3 bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-300 rounded-xl transition-all disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            🧹 Used Episodes ({storageStats.cleanupEstimate.usedEpisodes})
+                                        </button>
+                                        <button
+                                            onClick={() => handleManualCleanup(['testLogs'])}
+                                            disabled={cleaningUp}
+                                            className="px-4 py-3 bg-orange-600/20 hover:bg-orange-600/40 border border-orange-500/30 text-orange-300 rounded-xl transition-all disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            🧹 Test Logs
+                                        </button>
+                                        <button
+                                            onClick={() => handleManualCleanup(['readyPrompts'])}
+                                            disabled={cleaningUp}
+                                            className="px-4 py-3 bg-pink-600/20 hover:bg-pink-600/40 border border-pink-500/30 text-pink-300 rounded-xl transition-all disabled:opacity-50 text-sm font-medium"
+                                        >
+                                            🧹 Prompts
+                                        </button>
+                                        <button
+                                            onClick={() => handleManualCleanup(['all'])}
+                                            disabled={cleaningUp}
+                                            className="px-4 py-3 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-xl transition-all disabled:opacity-50 text-sm font-bold flex items-center justify-center gap-2"
+                                        >
+                                            {cleaningUp ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                            ล้างทั้งหมด
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-4">
+                                        ⚠️ episodeHistory จะถูก Backup ไปยัง deletedBackups/ ก่อนลบ | Auto Clean ทำงานทุกวัน 02:00-05:00 UTC
+                                    </p>
+                                </div>
+                            </>
+                        )}
+
+                        {!storageStats && !loadingStorage && (
+                            <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-12 text-center">
+                                <Database className="text-slate-500 mx-auto mb-4" size={48} />
+                                <p className="text-slate-400">เลือก Project แล้วกด "โหลดข้อมูล" เพื่อดูสถิติ Storage</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
