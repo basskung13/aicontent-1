@@ -107,14 +107,15 @@ function App() {
     init();
   }, [])
 
-  // 2. Fetch Projects (REST API)
+  // 2. Fetch Projects (REST API) - Fixed: Use users/{uid}/projects path
   useEffect(() => {
     if (user) {
       setIsLoadingProjects(true);
       const fetchProjects = async () => {
         try {
           const token = await getAuthToken();
-          const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/projects?key=${API_KEY}`;
+          // FIXED: Correct path is users/{uid}/projects, not /projects
+          const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${user.uid}/projects?key=${API_KEY}`;
 
           const res = await fetch(url, {
             headers: token ? { 'Authorization': `Bearer ${token}` } : {}
@@ -130,8 +131,10 @@ function App() {
               name: p.name?.stringValue || p.title?.stringValue || p.id
             }));
             setProjects(projectList);
+            console.log(`✅ Loaded ${projectList.length} projects for user ${user.uid}`);
           } else {
             setProjects([]);
+            console.log(`⚠️ No projects found for user ${user.uid}`);
           }
         } catch (error) {
           console.error("Error fetching projects:", error);
@@ -227,6 +230,28 @@ function App() {
       alert("Start Error: " + error.message);
     }
   }
+
+  // 4.5 Inject Variable Marker into Active Input
+  const injectVariable = async (variableName) => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) {
+        alert("No active tab found!");
+        return;
+      }
+
+      // Send message to content script to inject variable
+      chrome.tabs.sendMessage(tab.id, {
+        action: "INJECT_VARIABLE",
+        variable: `{{${variableName}}}`
+      });
+
+      setLogs(prev => [`[VAR] Injected: {{${variableName}}}`, ...prev]);
+    } catch (error) {
+      console.error("Inject Variable Error:", error);
+      setLogs(prev => [`[ERROR] Inject failed: ${error.message}`, ...prev]);
+    }
+  };
 
   // 4. Fetch Recipes (REST API Polling)
   useEffect(() => {
@@ -727,6 +752,91 @@ function App() {
               <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>
                 Recording to <b>{selectedProjectId}</b>
                 <br />Status: {statusMessage}
+              </div>
+            )}
+
+            {/* 🧱 VARIABLE MARKERS - Show when Recording */}
+            {isRecording && (
+              <div style={{
+                marginTop: '12px',
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(249,115,22,0.1))',
+                border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '8px',
+                padding: '12px'
+              }}>
+                <div style={{ 
+                  fontSize: '11px', 
+                  fontWeight: 'bold', 
+                  color: '#f87171', 
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  🧱 Variable Markers <span style={{ color: '#64748b', fontWeight: 'normal' }}>(คลิกเพื่อใส่อัตโนมัติ)</span>
+                </div>
+                
+                {/* General Variables */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  {['prompt', 'title', 'tags', 'sceneIndex'].map(v => (
+                    <button
+                      key={v}
+                      onClick={() => injectVariable(v)}
+                      style={{
+                        background: '#1e293b',
+                        border: '1px solid #334155',
+                        color: '#22c55e',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        fontFamily: 'monospace',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {`{{${v}}}`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Platform-Specific Variables */}
+                <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '4px' }}>Platform-Specific:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {['youtube', 'facebook', 'tiktok', 'instagram'].map(platform => (
+                    <div key={platform} style={{ display: 'flex', gap: '2px' }}>
+                      <button
+                        onClick={() => injectVariable(`title_${platform}`)}
+                        style={{
+                          background: '#0f172a',
+                          border: '1px solid #334155',
+                          color: '#60a5fa',
+                          padding: '3px 6px',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontSize: '9px',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        {`{{title_${platform}}}`}
+                      </button>
+                      <button
+                        onClick={() => injectVariable(`tags_${platform}`)}
+                        style={{
+                          background: '#0f172a',
+                          border: '1px solid #334155',
+                          color: '#a78bfa',
+                          padding: '3px 6px',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontSize: '9px',
+                          fontFamily: 'monospace'
+                        }}
+                      >
+                        {`{{tags_${platform}}}`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

@@ -9,6 +9,75 @@ chrome.sidePanel
 const FIREBASE_PROJECT_ID = "content-auto-post";
 const API_KEY = "AIzaSyDGEnGxtkor9PwWkgjiQvrr9SmZ_IHKapE"; // Public Key for REST calls
 
+// --- HELPER: Firestore Value -> JS ---
+const fromFirestoreValue = (val) => {
+    if (!val) return null;
+    if (val.mapValue) {
+        const out = {};
+        const fields = val.mapValue.fields || {};
+        for (const k in fields) out[k] = fromFirestoreValue(fields[k]);
+        return out;
+    }
+    if (val.arrayValue) return (val.arrayValue.values || []).map(fromFirestoreValue);
+    if (val.stringValue !== undefined) return val.stringValue;
+    if (val.integerValue !== undefined) return Number(val.integerValue);
+    if (val.doubleValue !== undefined) return Number(val.doubleValue);
+    if (val.booleanValue !== undefined) return val.booleanValue;
+    if (val.timestampValue !== undefined) return val.timestampValue;
+    if (val.nullValue !== undefined) return null;
+    return val;
+};
+
+// --- HELPER: Fetch Block from global_recipe_blocks (by name field, not document ID) ---
+const fetchBlock = async (blockName) => {
+    try {
+        // Query by name field since document IDs are auto-generated
+        const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery?key=${API_KEY}`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                structuredQuery: {
+                    from: [{ collectionId: 'global_recipe_blocks' }],
+                    where: {
+                        fieldFilter: {
+                            field: { fieldPath: 'name' },
+                            op: 'EQUAL',
+                            value: { stringValue: blockName }
+                        }
+                    },
+                    limit: 1
+                }
+            })
+        });
+        
+        const data = await res.json();
+        console.log('📦 Block query result for', blockName, ':', data);
+        
+        if (!data[0] || !data[0].document) {
+            console.warn(`⚠️ Block not found: ${blockName}`);
+            return null;
+        }
+        
+        const doc = data[0].document;
+        const f = doc.fields;
+        const docId = doc.name.split('/').pop();
+        
+        return {
+            id: docId,
+            name: f.name?.stringValue || blockName,
+            type: f.type?.stringValue || 'ONCE',
+            category: f.category?.stringValue || 'general',
+            startUrl: f.startUrl?.stringValue || '',
+            variables: f.variables?.arrayValue?.values?.map(v => v.stringValue) || [],
+            steps: f.steps?.arrayValue?.values?.map(fromFirestoreValue) || []
+        };
+    } catch (err) {
+        console.error(`❌ Failed to fetch block ${blockName}:`, err);
+        return null;
+    }
+};
+
 // --- MESSAGE COORDINATOR ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // 1. Handle START Recording
@@ -70,7 +139,259 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log("💾 Step Captured:", request.payload);
     }
 
-    // 4. Asset Pipeline: Server Asset Logic
+    // 3.5 Handle STOP_TEST - Stop current test
+    if (request.action === "STOP_TEST") {
+        console.log("⏹ Stop test requested");
+        chrome.storage.local.set({ stopTest: true });
+    }
+
+    // 4. Handle TEST_BLOCK - Run single block for testing (Auto-open startUrl)
+    if (request.action === "TEST_BLOCK") {
+        console.log("🧪 Testing Block:", request.blockName);
+        (async () => {
+            try {
+                const block = await fetchBlock(request.blockName);
+                if (!block) {
+                    console.error("❌ Block not found:", request.blockName);
+                    return;
+                }
+                console.log("📦 Block loaded:", block);
+                
+                // Smart Tab: Check existing tabs first, then use startUrl if needed
+                let tabId = request.tabId;
+                const targetUrl = block.startUrl?.trim();
+                
+                console.log("🔍 Block startUrl check:", { startUrl: targetUrl, hasUrl: !!targetUrl });
+                
+                if (targetUrl && targetUrl !== 'null') {
+                    // Check if any existing tab matches the startUrl
+                    const allTabs = await chrome.tabs.query({});
+                    const targetOrigin = new URL(targetUrl).origin;
+                    const existingTab = allTabs.find(tab => {
+                        try {
+                            return tab.url && new URL(tab.url).origin === targetOrigin;
+                        } catch { return false; }
+                    });
+                    
+                    if (existingTab) {
+                        console.log("✅ Found existing tab with same origin:", existingTab.url);
+                        tabId = existingTab.id;
+                        // Activate the existing tab and navigate to exact startUrl
+                        await chrome.tabs.update(tabId, { active: true, url: targetUrl });
+                        await chrome.windows.update(existingTab.windowId, { focused: true });
+                        
+                        // Wait for navigation to complete
+                        await new Promise(resolve => {
+                            const listener = (updatedTabId, info) => {
+                                if (updatedTabId === tabId && info.status === 'complete') {
+                                    chrome.tabs.onUpdated.removeListener(listener);
+                                    resolve();
+                                }
+                            };
+                            chrome.tabs.onUpdated.addListener(listener);
+                            setTimeout(resolve, 10000);
+                        });
+                        await new Promise(r => setTimeout(r, 1000));
+                    } else {
+                        console.log("🌐 No existing tab found, opening new tab:", targetUrl);
+                        const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
+                        tabId = newTab.id;
+                        
+                        // Wait for tab to fully load
+                        await new Promise(resolve => {
+                            const listener = (updatedTabId, info) => {
+                                if (updatedTabId === tabId && info.status === 'complete') {
+                                    chrome.tabs.onUpdated.removeListener(listener);
+                                    resolve();
+                                }
+                            };
+                            chrome.tabs.onUpdated.addListener(listener);
+                            setTimeout(resolve, 10000);
+                        });
+                        
+                        // Additional wait for page scripts
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                    console.log("✅ Tab ready:", tabId);
+                }
+                
+                if (!tabId) {
+                    console.error("❌ No tabId available");
+                    return;
+                }
+
+                // Execute block steps with highlight
+                for (let i = 0; i < block.steps.length; i++) {
+                    // Check if test was stopped
+                    const stopFlag = await chrome.storage.local.get('stopTest');
+                    if (stopFlag.stopTest) {
+                        console.log("⏹ Test stopped by user");
+                        await chrome.storage.local.remove('stopTest');
+                        return;
+                    }
+
+                    const step = block.steps[i];
+                    const stepDelay = step.delay || 1000;
+                    console.log(`▶️ Step ${i + 1}/${block.steps.length} (delay: ${stepDelay}ms):`, step);
+                    
+                    // Send STEP_STARTED to UI
+                    chrome.runtime.sendMessage({
+                        action: "RECIPE_STATUS_UPDATE",
+                        recipeId: request.blockName,
+                        status: "STEP_STARTED",
+                        stepIndex: i,
+                        totalSteps: block.steps.length,
+                        stepAction: step.action,
+                        stepSelector: step.selector || ''
+                    });
+                    
+                    // Wait before step using recorded delay (minimum 500ms)
+                    if (i > 0) {
+                        const waitTime = Math.max(stepDelay, 500);
+                        console.log(`⏱️ Waiting ${waitTime}ms...`);
+                        await new Promise(r => setTimeout(r, waitTime));
+                    }
+                    
+                    // Send step to content script with highlight
+                    await chrome.tabs.sendMessage(tabId, {
+                        action: "EXECUTE_STEP_WITH_HIGHLIGHT",
+                        step: step,
+                        stepIndex: i,
+                        totalSteps: block.steps.length
+                    });
+
+                    // Send STEP_COMPLETED
+                    chrome.runtime.sendMessage({
+                        action: "RECIPE_STATUS_UPDATE",
+                        recipeId: request.blockName,
+                        status: "STEP_COMPLETED",
+                        stepIndex: i,
+                        totalSteps: block.steps.length
+                    });
+                }
+                
+                // Send COMPLETED
+                chrome.runtime.sendMessage({
+                    action: "RECIPE_STATUS_UPDATE",
+                    recipeId: request.blockName,
+                    status: "COMPLETED"
+                });
+                console.log("✅ Block test completed:", request.blockName);
+            } catch (err) {
+                console.error("❌ Test Block Error:", err);
+            }
+        })();
+    }
+
+    // 5. Handle TEST_TEMPLATE - Run all blocks in sequence for testing (Auto-open startUrl)
+    if (request.action === "TEST_TEMPLATE") {
+        console.log("🧪 Testing Template:", request.blocks);
+        (async () => {
+            try {
+                let tabId = request.tabId;
+                
+                // Get first block to check for startUrl
+                const firstBlock = await fetchBlock(request.blocks[0]);
+                const targetUrl = firstBlock?.startUrl?.trim();
+                console.log("🔍 First block startUrl check:", { startUrl: targetUrl, hasUrl: !!targetUrl });
+                
+                if (targetUrl && targetUrl !== 'null') {
+                    // Check if any existing tab matches the startUrl
+                    const allTabs = await chrome.tabs.query({});
+                    const targetOrigin = new URL(targetUrl).origin;
+                    const existingTab = allTabs.find(tab => {
+                        try {
+                            return tab.url && new URL(tab.url).origin === targetOrigin;
+                        } catch { return false; }
+                    });
+                    
+                    if (existingTab) {
+                        console.log("✅ Found existing tab with same origin:", existingTab.url);
+                        tabId = existingTab.id;
+                        // Activate the existing tab and navigate to exact startUrl
+                        await chrome.tabs.update(tabId, { active: true, url: targetUrl });
+                        await chrome.windows.update(existingTab.windowId, { focused: true });
+                        
+                        // Wait for navigation to complete
+                        await new Promise(resolve => {
+                            const listener = (updatedTabId, info) => {
+                                if (updatedTabId === tabId && info.status === 'complete') {
+                                    chrome.tabs.onUpdated.removeListener(listener);
+                                    resolve();
+                                }
+                            };
+                            chrome.tabs.onUpdated.addListener(listener);
+                            setTimeout(resolve, 10000);
+                        });
+                        await new Promise(r => setTimeout(r, 1000));
+                    } else {
+                        console.log("🌐 No existing tab found, opening new tab:", targetUrl);
+                        const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
+                        tabId = newTab.id;
+                        
+                        // Wait for tab to fully load
+                        await new Promise(resolve => {
+                            const listener = (updatedTabId, info) => {
+                                if (updatedTabId === tabId && info.status === 'complete') {
+                                    chrome.tabs.onUpdated.removeListener(listener);
+                                    resolve();
+                                }
+                            };
+                            chrome.tabs.onUpdated.addListener(listener);
+                            setTimeout(resolve, 10000);
+                        });
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                    console.log("✅ Tab ready:", tabId);
+                }
+                
+                if (!tabId) {
+                    console.error("❌ No tabId available");
+                    return;
+                }
+
+                for (let blockIndex = 0; blockIndex < request.blocks.length; blockIndex++) {
+                    const blockName = request.blocks[blockIndex];
+                    console.log(`📦 Block ${blockIndex + 1}/${request.blocks.length}: ${blockName}`);
+                    
+                    const block = await fetchBlock(blockName);
+                    if (!block) {
+                        console.warn(`⚠️ Block not found: ${blockName}, skipping...`);
+                        continue;
+                    }
+
+                    // Execute block steps with highlight
+                    for (let i = 0; i < block.steps.length; i++) {
+                        const step = block.steps[i];
+                        const stepDelay = step.delay || 1000;
+                        console.log(`▶️ Step ${i + 1}/${block.steps.length} (delay: ${stepDelay}ms):`, step);
+                        
+                        // Wait before step using recorded delay (minimum 500ms)
+                        if (i > 0) {
+                            const waitTime = Math.max(stepDelay, 500);
+                            console.log(`⏱️ Waiting ${waitTime}ms...`);
+                            await new Promise(r => setTimeout(r, waitTime));
+                        }
+                        
+                        await chrome.tabs.sendMessage(tabId, {
+                            action: "EXECUTE_STEP_WITH_HIGHLIGHT",
+                            step: step,
+                            stepIndex: i,
+                            totalSteps: block.steps.length,
+                            blockName: blockName,
+                            blockIndex: blockIndex,
+                            totalBlocks: request.blocks.length
+                        });
+                    }
+                }
+                console.log("✅ Template test completed");
+            } catch (err) {
+                console.error("❌ Test Template Error:", err);
+            }
+        })();
+    }
+
+    // 6. Asset Pipeline: Server Asset Logic
     if (request.action === "FETCH_ASSET") {
         chrome.storage.local.get("latest_asset", async (data) => {
             const asset = data.latest_asset;
@@ -169,29 +490,9 @@ const extractUserPath = (fullPath) => {
     return match ? { uid: match[1], pid: match[2] } : null;
 };
 
-// --- SCHEDULER: JOB CHECKER (REST API) ---
+// --- SCHEDULER: JOB CHECKER (REST API) with BLOCK SEQUENCE SUPPORT ---
 const checkJobs = async (projectId) => {
     try {
-        // Run Query: status == 'pending'
-        // FIX: We must query the subcollection 'agent_jobs' under the specific project.
-        // BUT we need the UID. 'projectId' param here comes from 'activeProjectId' storage.
-        // Does 'activeProjectId' contain the full path?
-        // Let's assume the user manually saves the Project ID.
-        // To support Logs, the Extension needs to know the USER ID.
-        // Quick Fix: We assume `agent_jobs` behaves globally or we search via Collection Group in the Job Checker.
-
-        // Let's stick to the existing `checkJobs` flow but Make it Robust:
-        // 1. We query `agent_jobs` collection group for this project (or just by projectID filter).
-        // Since we are creating `agent_jobs` at root in `scheduleJobs`, wait...
-        // `scheduleJobs` creates: `db.collection('agent_jobs').doc(jobId)` -> ROOT COLLECTION.
-        // Double check `scheduleJobs`...
-        // YES! `const jobRef = db.collection('agent_jobs').doc(jobId);` 
-        // So `agent_jobs` is at the ROOT. It has `projectId` and `userId` fields.
-
-        // OK, so finding jobs is easy.
-        // BUT logs need to go to `users/{uid}/projects/{pid}/logs`.
-        // The Job Document contains `userId` and `projectId`. We can use that!
-
         const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery?key=${API_KEY}`;
 
         const response = await fetch(url, {
@@ -219,18 +520,24 @@ const checkJobs = async (projectId) => {
             const doc = data[0].document;
             const docId = doc.name.split('/').pop();
             const fields = doc.fields;
-            const userId = fields.userId?.stringValue; // CRITICAL: Get User ID from Job
+            const userId = fields.userId?.stringValue;
 
+            // Parse Job Data
             const job = {
                 id: docId,
                 status: fields.status?.stringValue,
-                recipeId: fields.recipeId?.stringValue,
-                prompts: fields.prompts // Get prompts directly from job
+                blockSequence: fields.blockSequence?.arrayValue?.values?.map(v => v.stringValue) || [],
+                currentBlockIndex: Number(fields.currentBlockIndex?.integerValue || 0),
+                platforms: fields.platforms?.arrayValue?.values?.map(fromFirestoreValue) || [],
+                prompts: fields.prompts?.arrayValue?.values?.map(v => v.stringValue) || [],
+                scenes: fields.scenes?.arrayValue?.values?.map(fromFirestoreValue) || [],
+                titles: fromFirestoreValue(fields.titles) || {},
+                tags: fromFirestoreValue(fields.tags) || {}
             };
 
-            console.log("🚀 Found Job:", job);
+            console.log("🧱 Found Job with Block Sequence:", job.blockSequence);
 
-            // Helper to Log using the found User ID
+            // Helper: Write Log
             const writeLog = (msg, level) => {
                 if (userId && projectId) {
                     const logUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${userId}/projects/${projectId}/logs?key=${API_KEY}`;
@@ -248,184 +555,180 @@ const checkJobs = async (projectId) => {
                 }
             };
 
-            writeLog(`🚀 Starting Job: ${job.recipeId}`, "INFO");
-
-            // Mark as Running (PATCH)
-            const patchUrl = `https://firestore.googleapis.com/v1/${doc.name}?updateMask.fieldPaths=status&key=${API_KEY}`;
-            await fetch(patchUrl, {
-                method: 'PATCH',
-                body: JSON.stringify({
+            // Helper: Update Job Status
+            const updateJobStatus = async (status, errorMsg = null) => {
+                const patchUrl = `https://firestore.googleapis.com/v1/${doc.name}?updateMask.fieldPaths=status&updateMask.fieldPaths=completedAt&updateMask.fieldPaths=error&key=${API_KEY}`;
+                const body = {
                     fields: {
-                        status: { stringValue: 'running' },
-                        startedAt: { stringValue: new Date().toISOString() }
+                        status: { stringValue: status },
+                        completedAt: { timestampValue: new Date().toISOString() }
                     }
-                })
+                };
+                if (errorMsg) body.fields.error = { stringValue: errorMsg };
+                await fetch(patchUrl, { method: 'PATCH', body: JSON.stringify(body) });
+                console.log(`📝 Job ${job.id} status: ${status}`);
+            };
+
+            // Helper: Update Current Block Index
+            const updateBlockIndex = async (index) => {
+                const patchUrl = `https://firestore.googleapis.com/v1/${doc.name}?updateMask.fieldPaths=currentBlockIndex&key=${API_KEY}`;
+                await fetch(patchUrl, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ fields: { currentBlockIndex: { integerValue: index } } })
+                });
+            };
+
+            // Mark as Running
+            await fetch(`https://firestore.googleapis.com/v1/${doc.name}?updateMask.fieldPaths=status&key=${API_KEY}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ fields: { status: { stringValue: 'running' } } })
             });
 
-            // Trigger Recipe if exists
-            if (job.recipeId) {
-                console.log(`▶ Found Job for Recipe ID: ${job.recipeId}`);
+            // === BLOCK SEQUENCE EXECUTION ===
+            if (job.blockSequence.length === 0) {
+                writeLog("❌ No blocks in sequence", "ERROR");
+                await updateJobStatus('FAILED', 'No blocks in sequence');
+                return;
+            }
 
-                // Fetch Recipe Logic (Legacy or Command?)
-                // If it is CMD_GENERATE_VIDEO, we might default to a built-in recipe or parse `prompts` directly.
-                // Assuming we use the "Generic Automation Recipe" or simple Prompt Injection.
+            writeLog(`🧱 Starting Block Sequence: ${job.blockSequence.join(' → ')}`, "INFO");
 
-                // For simplicity in this fix, we assume the `job` already contains the `prompts` array (as built by scheduleJobs).
-                // We just need a "Base Recipe" to execute these prompts (e.g. Open Facebook -> Type Prompt).
-                // But wait, the Agent needs a `startUrl` and `steps`.
-                // Does `scheduleJobs` attach `recipeId`? Yes: 'CMD_GENERATE_VIDEO'.
-                // We need to map 'CMD_GENERATE_VIDEO' to actual steps here or fetch a standard recipe.
+            let videoFilePath = null;
+            const MAX_RETRIES = 3;
 
-                // For now, let's assume we execute the 'prompts' using standard logic (check index.js earlier logic).
+            for (let i = job.currentBlockIndex; i < job.blockSequence.length; i++) {
+                const currentBlockId = job.blockSequence[i];
+                await updateBlockIndex(i);
 
-                // ... (Existing Logic for Recipe Execution) ...
-                // Quick Fix: We reuse the exact existing logic but wrapped with Logs.
-                // NOTE: The previous code fetched recipe from `projects/${projectId}/recipes/${job.recipeId}`.
-                // We should ensure 'CMD_GENERATE_VIDEO' recipe exists or handle it dynamically.
-                // Let's assume it exists for now to avoid scope creep.
+                writeLog(`▶️ [${i + 1}/${job.blockSequence.length}] Running Block: ${currentBlockId}`, "INFO");
 
-                const recipeUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${userId}/projects/${projectId}/recipes/${job.recipeId}?key=${API_KEY}`;
-                const recipeRes = await fetch(recipeUrl);
-                // ... (Normal parsing) ...
-                // If recipe fetching fails (e.g. it's a Command), we might need fallback.
-                // Let's proceed with wrapping the EXISTING execution block.
+                // Fetch Block from global_recipe_blocks
+                const block = await fetchBlock(currentBlockId);
+                if (!block) {
+                    writeLog(`❌ Block not found: ${currentBlockId}`, "ERROR");
+                    await updateJobStatus('FAILED', `Block not found: ${currentBlockId}`);
+                    return;
+                }
 
-                // [INJECTION POINT: Success/Fail Logs]
-                // We inject `writeLog` into the Promise resolution below.
+                // Determine platform for upload blocks
+                const uploadBlockIndex = job.blockSequence.slice(0, i).filter(b => b.startsWith('UPLOAD_')).length;
+                const currentPlatform = job.platforms[uploadBlockIndex] || null;
+                const platformId = currentPlatform?.platformId || '';
 
-                const recipeDoc = await recipeRes.json();
-                if (recipeDoc.fields) {
-                    const r = recipeDoc.fields;
-                    // ... (Data Parsing) ...
-                    const fromValue = (val) => {
-                        if (!val) return null;
-                        if (val.mapValue) {
-                            const out = {};
-                            const fields = val.mapValue.fields || {};
-                            for (const k in fields) out[k] = fromValue(fields[k]);
-                            return out;
-                        }
-                        if (val.arrayValue) return (val.arrayValue.values || []).map(fromValue);
-                        if (val.stringValue !== undefined) return val.stringValue;
-                        if (val.integerValue !== undefined) return Number(val.integerValue);
-                        return val;
-                    };
+                // Build Variables for this Recipe
+                const variables = {
+                    prompt: job.prompts[0] || '',
+                    prompts: job.prompts,
+                    scenes: job.scenes,
+                    videoFilePath: videoFilePath,
+                    platform: currentPlatform,
+                    platformId: platformId,
+                    title: job.titles?.[platformId] || job.titles?.youtube || '',
+                    tags: job.tags?.[platformId] || job.tags?.youtube || [],
+                    title_youtube: job.titles?.youtube || '',
+                    title_facebook: job.titles?.facebook || '',
+                    title_tiktok: job.titles?.tiktok || '',
+                    title_instagram: job.titles?.instagram || '',
+                    tags_youtube: (job.tags?.youtube || []).join(', '),
+                    tags_facebook: (job.tags?.facebook || []).join(', '),
+                    tags_tiktok: (job.tags?.tiktok || []).join(', '),
+                    tags_instagram: (job.tags?.instagram || []).join(', ')
+                };
 
-                    const steps = r.steps?.arrayValue?.values?.map(fromValue) || [];
-                    const startUrl = r.startUrl?.stringValue || "";
-                    const recipePayload = { id: job.recipeId, steps: steps, startUrl: startUrl };
-                    const targetTab = await ensureTab(startUrl);
+                // Execute Block with Retry
+                let blockSuccess = false;
+                let retryCount = 0;
 
-                    // USE PROMPTS FROM JOB, NOT RECIPE (since Scheduler puts them in Job)
-                    // The job.prompts (from Firestore) is { arrayValue: { values: ... } }
-                    const rawPrompts = job.prompts;
-                    const prompts = rawPrompts?.arrayValue?.values?.map(v => v.stringValue) || [];
-
-                    // Helper to update job status in Firestore
-                    const updateJobStatus = async (status, errorMsg = null) => {
-                        const statusPatchUrl = `https://firestore.googleapis.com/v1/${doc.name}?updateMask.fieldPaths=status&updateMask.fieldPaths=completedAt&updateMask.fieldPaths=error&key=${API_KEY}`;
-                        const statusBody = {
-                            fields: {
-                                status: { stringValue: status },
-                                completedAt: { timestampValue: new Date().toISOString() }
-                            }
-                        };
-                        if (errorMsg) {
-                            statusBody.fields.error = { stringValue: errorMsg };
-                        }
-                        await fetch(statusPatchUrl, {
-                            method: 'PATCH',
-                            body: JSON.stringify(statusBody)
-                        });
-                        console.log(`📝 Job ${job.id} status updated to: ${status}`);
-                    };
+                while (!blockSuccess && retryCount < MAX_RETRIES) {
+                    if (retryCount > 0) {
+                        writeLog(`🔄 Retry ${retryCount}/${MAX_RETRIES} for ${currentBlockId}...`, "INFO");
+                        await new Promise(r => setTimeout(r, 5000));
+                    }
 
                     try {
-                        if (prompts.length > 0) {
-                            writeLog(`🎬 Processing ${prompts.length} scenes...`, "INFO");
-                            const MAX_RETRIES = 3;
-                            
-                            for (let i = 0; i < prompts.length; i++) {
-                                const prompt = prompts[i];
-                                let sceneSuccess = false;
-                                let retryCount = 0;
-                                
-                                while (!sceneSuccess && retryCount < MAX_RETRIES) {
-                                    if (retryCount > 0) {
-                                        writeLog(`🔄 Retry ${retryCount}/${MAX_RETRIES} for Scene ${i + 1}...`, "INFO");
-                                    } else {
-                                        writeLog(`🎬 Running Scene ${i + 1}/${prompts.length}: ${prompt.substring(0, 30)}...`, "INFO");
-                                    }
+                        const targetTab = await ensureTab(block.startUrl);
+                        const blockPayload = {
+                            id: currentBlockId,
+                            steps: block.steps,
+                            startUrl: block.startUrl,
+                            variables: variables
+                        };
 
-                                    const currentPayload = { ...recipePayload, variables: { prompt: prompt, sceneIndex: i } };
+                        // For LOOP blocks (like ADD_SCENE_TEXT), run per-scene
+                        if (block.type === 'LOOP' && job.prompts.length > 0) {
+                            writeLog(`🔁 LOOP Block: Processing ${job.prompts.length} scenes...`, "INFO");
 
-                                    try {
-                                        await new Promise((resolve, reject) => {
-                                            const completionListener = (msg) => {
-                                                if (msg.action === "RECIPE_STATUS_UPDATE" && msg.recipeId === job.recipeId) {
-                                                    chrome.runtime.onMessage.removeListener(completionListener);
-                                                    if (msg.status === "COMPLETED") resolve();
-                                                    else reject(new Error(msg.error || "Recipe Failed"));
-                                                }
-                                            };
-                                            chrome.runtime.onMessage.addListener(completionListener);
-                                            executeRecipeOnTab(targetTab, currentPayload);
-                                            setTimeout(() => {
-                                                chrome.runtime.onMessage.removeListener(completionListener);
-                                                reject(new Error("Scene Timeout (5min)"));
-                                            }, 300000);
-                                        });
+                            for (let s = 0; s < job.prompts.length; s++) {
+                                const scenePayload = {
+                                    ...blockPayload,
+                                    variables: { ...variables, prompt: job.prompts[s], sceneIndex: s }
+                                };
 
-                                        // Scene Success!
-                                        sceneSuccess = true;
-                                        writeLog(`✅ Scene ${i + 1} Completed`, "SUCCESS");
-                                        
-                                    } catch (sceneError) {
-                                        retryCount++;
-                                        writeLog(`⚠️ Scene ${i + 1} failed: ${sceneError.message}`, "ERROR");
-                                        
-                                        if (retryCount >= MAX_RETRIES) {
-                                            throw new Error(`Scene ${i + 1} failed after ${MAX_RETRIES} retries`);
+                                writeLog(`🎬 Scene ${s + 1}/${job.prompts.length}`, "INFO");
+
+                                await new Promise((resolve, reject) => {
+                                    const listener = (msg) => {
+                                        if (msg.action === "RECIPE_STATUS_UPDATE" && msg.recipeId === currentBlockId) {
+                                            chrome.runtime.onMessage.removeListener(listener);
+                                            if (msg.status === "COMPLETED") {
+                                                if (msg.videoFilePath) videoFilePath = msg.videoFilePath;
+                                                resolve();
+                                            } else {
+                                                reject(new Error(msg.error || "Scene Failed"));
+                                            }
                                         }
-                                        
-                                        // Wait before retry
-                                        await new Promise(r => setTimeout(r, 5000));
-                                    }
-                                }
-                                
-                                // Delay between scenes
-                                await new Promise(r => setTimeout(r, 3000));
+                                    };
+                                    chrome.runtime.onMessage.addListener(listener);
+                                    executeRecipeOnTab(targetTab, scenePayload);
+                                    setTimeout(() => {
+                                        chrome.runtime.onMessage.removeListener(listener);
+                                        reject(new Error("Scene Timeout (5min)"));
+                                    }, 300000);
+                                });
+
+                                await new Promise(r => setTimeout(r, 3000)); // Delay between scenes
                             }
-                            
-                            writeLog("🏆 All Scenes Completed! Job Finished Successfully", "SUCCESS");
-                            await updateJobStatus('COMPLETED');
                         } else {
-                            // Single Run
+                            // ONCE blocks (Export, Download, Upload)
                             await new Promise((resolve, reject) => {
-                                const completionListener = (msg) => {
-                                    if (msg.action === "RECIPE_STATUS_UPDATE" && msg.recipeId === job.recipeId) {
-                                        chrome.runtime.onMessage.removeListener(completionListener);
-                                        if (msg.status === "COMPLETED") resolve();
-                                        else reject(new Error(msg.error || "Recipe Failed"));
+                                const listener = (msg) => {
+                                    if (msg.action === "RECIPE_STATUS_UPDATE" && msg.recipeId === currentBlockId) {
+                                        chrome.runtime.onMessage.removeListener(listener);
+                                        if (msg.status === "COMPLETED") {
+                                            if (msg.videoFilePath) videoFilePath = msg.videoFilePath;
+                                            resolve();
+                                        }
+                                        else reject(new Error(msg.error || "Block Failed"));
                                     }
                                 };
-                                chrome.runtime.onMessage.addListener(completionListener);
-                                executeRecipeOnTab(targetTab, recipePayload);
+                                chrome.runtime.onMessage.addListener(listener);
+                                executeRecipeOnTab(targetTab, blockPayload);
                                 setTimeout(() => {
-                                    chrome.runtime.onMessage.removeListener(completionListener);
-                                    reject(new Error("Timeout"));
+                                    chrome.runtime.onMessage.removeListener(listener);
+                                    reject(new Error("Block Timeout (5min)"));
                                 }, 300000);
                             });
-                            writeLog("✅ Task Completed", "SUCCESS");
-                            await updateJobStatus('COMPLETED');
                         }
-                    } catch (execError) {
-                        console.error("❌ Job Execution Failed:", execError);
-                        writeLog(`❌ Job Failed: ${execError.message}`, "ERROR");
-                        await updateJobStatus('FAILED', execError.message);
+
+                        blockSuccess = true;
+                        writeLog(`✅ Completed Block: ${currentBlockId}`, "SUCCESS");
+
+                    } catch (err) {
+                        retryCount++;
+                        writeLog(`⚠️ ${currentBlockId} failed: ${err.message}`, "ERROR");
+                        if (retryCount >= MAX_RETRIES) {
+                            await updateJobStatus('FAILED', `${currentBlockId} failed after ${MAX_RETRIES} retries`);
+                            return;
+                        }
                     }
                 }
+
+                // Delay between blocks
+                await new Promise(r => setTimeout(r, 5000));
             }
+
+            writeLog("🏆 All Blocks Completed!", "SUCCESS");
+            await updateJobStatus('COMPLETED');
         } else {
             console.log("💤 No pending jobs.");
         }
