@@ -500,6 +500,7 @@ function chunkText(text, maxLength) {
 // SHARED HELPER: Per-Scene Expansion with Episode Topic
 // Used by: testPromptPipeline, scheduleJobs
 // This ensures Generate Test and Production use IDENTICAL logic
+// Enhanced: Emotional Arc, Transition Hints, Sound Design, Visual Consistency, Scene Memory, Dialogue Markers
 // ============================================
 async function expandScenesWithTopic(params) {
   const {
@@ -515,11 +516,42 @@ async function expandScenesWithTopic(params) {
 
   const openai = getOpenAI();
   const expandedPrompts = [];
+  let previousSceneSummary = ''; // Scene Memory for continuity
+
+  // Build Expander block instructions with enhanced language detection
+  let detectedLanguage = 'English'; // default
+  const languageKeywords = {
+    'อีสาน': 'ภาษาอีสาน (Isan Thai dialect)',
+    'ไทย': 'ภาษาไทย (Thai)',
+    'thai': 'ภาษาไทย (Thai)',
+    'english': 'English',
+    'อังกฤษ': 'English',
+    'ญี่ปุ่น': 'ภาษาญี่ปุ่น (Japanese)',
+    'japanese': 'ภาษาญี่ปุ่น (Japanese)',
+    'จีน': 'ภาษาจีน (Chinese)',
+    'chinese': 'ภาษาจีน (Chinese)'
+  };
+
+  // Detect language from Expander block names
+  if (expanderBlocks && expanderBlocks.length > 0) {
+    for (const block of expanderBlocks) {
+      const blockNameLower = (block.name || '').toLowerCase();
+      for (const [keyword, language] of Object.entries(languageKeywords)) {
+        if (blockNameLower.includes(keyword.toLowerCase())) {
+          detectedLanguage = language;
+          console.log(`   🌐 Detected language from Expander: "${block.name}" → ${language}`);
+          break;
+        }
+      }
+    }
+  }
 
   // Build Expander block instructions
   const blockInstructions = expanderBlocks && expanderBlocks.length > 0
     ? expanderBlocks.map((b, i) => `${i + 1}. ${b.name}: ${b.instruction || b.description || ''}`).join('\n')
     : 'Standard cinematic style with clear visuals';
+  
+  console.log(`   📝 Expander Block Instructions:\n${blockInstructions}`);
 
   // Build episode context
   const episodeContext = episodeTopic
@@ -531,53 +563,141 @@ async function expandScenesWithTopic(params) {
     ? `\n\n=== CHARACTERS ===\n${characters.map(c => `- ${c.name}: ${c.visualDescription || c.description || 'N/A'}`).join('\n')}`
     : '';
 
+  // Define Visual Style for consistency across all scenes
+  const visualStyleGuide = `
+=== VISUAL STYLE GUIDE (Maintain consistency across ALL scenes) ===
+- Color Palette: Consistent color grading throughout the video
+- Lighting Style: Match the established mood and atmosphere
+- Camera Language: Maintain similar framing and movement patterns
+- Visual Tone: Keep the same cinematic quality and style`;
+
   console.log(`🔧 expandScenesWithTopic: Starting expansion of ${rawScenes.length} scenes`);
   console.log(`   Topic: "${episodeTopic || 'No Episode'}"`);
   console.log(`   Expander Blocks: ${expanderBlocks?.length || 0}`);
 
-  // Per-Scene Loop (NOT bulk generation)
+  // Calculate emotional arc positions
+  const totalScenes = rawScenes.length;
+  const getEmotionalArcPosition = (index) => {
+    const position = index / (totalScenes - 1 || 1);
+    if (position <= 0.2) return 'INTRODUCTION - Establish tone, introduce setting';
+    if (position <= 0.4) return 'RISING - Build tension or interest';
+    if (position <= 0.6) return 'CLIMAX - Peak emotional intensity';
+    if (position <= 0.8) return 'FALLING - Begin resolution';
+    return 'RESOLUTION - Conclude with impact';
+  };
+
+  // Per-Scene Loop with Scene Memory
   for (let i = 0; i < rawScenes.length; i++) {
     const scene = rawScenes[i];
     const scenePrompt = scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${i + 1}`;
     const sceneInstruction = scene.sceneInstruction || '';
+    const isFirstScene = i === 0;
+    const isLastScene = i === rawScenes.length - 1;
+    const nextSceneTitle = !isLastScene ? (rawScenes[i + 1]?.blockTitle || `Scene ${i + 2}`) : null;
 
     // Build scene instruction context if available
     const sceneInstructionContext = sceneInstruction
       ? `\n\n=== SCENE INSTRUCTION (IMPORTANT - Follow this direction) ===\n${sceneInstruction}`
       : '';
 
-    const systemPrompt = `You are a Premium Prompt Expander for AI video generation (Google Flow / Veo).
+    // Scene Memory context (what happened before)
+    const sceneMemoryContext = previousSceneSummary
+      ? `\n\n=== PREVIOUS SCENE CONTEXT (For continuity) ===\n${previousSceneSummary}`
+      : '';
 
-=== EXPANDER RULES ===
+    // Emotional Arc position
+    const emotionalPosition = getEmotionalArcPosition(i);
+
+    // Transition hint to next scene
+    const transitionContext = !isLastScene
+      ? `\n\n=== TRANSITION HINT ===\nThis scene should smoothly lead into: "${nextSceneTitle}"\nCreate a natural visual or narrative bridge to the next scene.`
+      : `\n\n=== TRANSITION HINT ===\nThis is the FINAL scene. End with impact and closure.`;
+
+    const systemPrompt = `You are a Premium Cinematic Prompt Expander for AI video generation (Google Flow / Veo).
+
+=== 🔴 PRIORITY ORDER (MUST FOLLOW THIS ORDER!) ===
+1. **EXPANDER BLOCKS** (Highest Priority) - Follow ALL rules from Expander Blocks
+2. **EPISODE TOPIC** - The scene MUST be about the Episode Topic
+3. **SCENE INSTRUCTION** - Use as template, but replace placeholders with Episode-appropriate content
+
+=== 🌐 REQUIRED LANGUAGE: ${detectedLanguage} ===
+⚠️ ALL dialogue, narration, and text MUST be in ${detectedLanguage}.
+DO NOT mix languages. DO NOT use English if the required language is not English.
+
+=== ⚠️ PRIORITY #1: EXPANDER BLOCKS (HIGHEST PRIORITY) ===
 ${blockInstructions}
+
+🔴 These Expander rules OVERRIDE everything else. Follow them strictly!
+
+=== 📺 PRIORITY #2: EPISODE TOPIC (DETERMINES SETTING & CONTEXT) ===
 ${episodeContext}
-${characterContext}
+
+🔴 CRITICAL: The EPISODE TOPIC determines:
+- WHERE the scene takes place (setting/location)
+- WHAT the atmosphere should be
+- HOW characters behave and what they discuss
+Example: If Episode = "ผีในบ้านร้าง" → Scene MUST be in haunted house, NOT in forest!
+
+=== 🎬 PRIORITY #3: SCENE INSTRUCTION (TEMPLATE WITH PLACEHOLDERS) ===
 ${sceneInstructionContext}
+
+🔴 PLACEHOLDER REPLACEMENT RULES:
+Scene Instruction may contain placeholders. Replace them based on EPISODE TOPIC:
+- [SETTING: ...] → Replace with location that matches Episode Topic
+- [LIGHTING: ...] → Replace with lighting that matches Episode mood
+- [ATMOSPHERE: ...] → Replace with atmosphere that matches Episode
+- [SFX: ...] → Replace with sounds that match Episode setting
+- [MUSIC: ...] → Replace with music that matches Episode mood
+
+Example Placeholder Replacement:
+- Episode: "ผีในบ้านร้าง"
+- [SETTING: สถานที่หลักตาม Episode] → "บ้านร้างเก่าทรุดโทรม มืดมิด"
+- [LIGHTING: แสงตามอารมณ์ Episode] → "แสงจันทร์สลัวส่องผ่านหน้าต่างแตก"
+- [ATMOSPHERE: บรรยากาศตาม Episode] → "บรรยากาศน่าขนลุก เย็นยะเยือก"
+
+${characterContext}
+${visualStyleGuide}
+${sceneMemoryContext}
+${transitionContext}
+
+=== EMOTIONAL ARC POSITION ===
+Scene ${i + 1} of ${totalScenes}: ${emotionalPosition}
+${isFirstScene ? '⭐ OPENING SCENE - Set the tone and hook the viewer immediately' : ''}
+${isLastScene ? '⭐ CLOSING SCENE - Deliver a memorable conclusion' : ''}
 
 === MODE CONTEXT ===
 Category: ${modeCategory || 'Cinematic'}
 System Instruction: ${systemInstruction || 'Create immersive video content'}
 
 === OUTPUT REQUIREMENTS ===
-1. Write a DETAILED ${sceneDuration}-second video scene prompt in English (150-300 words)
-2. Include: character appearances (if any), lighting, camera angles, ambient sounds, emotions
-3. Be cinematic and immersive
-4. The scene MUST be about "${episodeTopic || 'the main topic'}"
-${sceneInstruction ? '5. FOLLOW the Scene Instruction above as the primary direction for this scene' : ''}
-6. Output ONLY the expanded prompt, no explanations or markdown`;
+1. Write a DETAILED ${sceneDuration}-second video scene (200-400 words)
+2. 🔴 MANDATORY LANGUAGE: ${detectedLanguage} - ALL text MUST be in this language!
+3. 🔴 SETTING MUST MATCH EPISODE TOPIC - NOT Scene Instruction's placeholder!
+4. MUST INCLUDE all of these elements:
+   - **VISUAL**: Setting that matches EPISODE TOPIC, lighting, camera angles, camera movements
+   - **ATMOSPHERE**: Mood that matches EPISODE TOPIC
+   - **DIALOGUE**: Use [DIALOGUE: Character Name - what they express/discuss] markers in ${detectedLanguage}
+   - **SOUND**: Sound effects and music that match EPISODE TOPIC
+   - **ACTION**: What characters physically do, their expressions, body language
+5. Ensure VISUAL CONSISTENCY with previous scenes
+6. Create SMOOTH TRANSITION to the next scene
+7. Output ONLY the expanded prompt in ${detectedLanguage}, no explanations or markdown`;
 
     try {
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Scene ${i + 1} of ${rawScenes.length}: ${scenePrompt}${sceneInstruction ? `\n\nScene Direction: ${sceneInstruction}` : ''}` }
+          { role: 'user', content: `Scene ${i + 1} of ${rawScenes.length}: "${scenePrompt}"${sceneInstruction ? `\n\nScene Direction: ${sceneInstruction}` : ''}` }
         ],
         temperature: 0.7,
-        max_tokens: 800
+        max_tokens: 1200
       });
 
       const expanded = response.choices[0]?.message?.content?.trim() || scenePrompt;
+
+      // Update Scene Memory for next iteration (keep it concise)
+      previousSceneSummary = `Scene ${i + 1} "${scene.blockTitle || scenePrompt}": ${expanded.substring(0, 200)}...`;
 
       expandedPrompts.push({
         sceneNumber: i + 1,
@@ -585,7 +705,8 @@ ${sceneInstruction ? '5. FOLLOW the Scene Instruction above as the primary direc
         originalPrompt: scenePrompt,
         audioDescription: scene.audioAmbience || scene.audioInstruction || 'Ambient sounds',
         cameraAngle: scene.cameraAngle || 'wide',
-        blockTitle: scene.blockTitle || `Scene ${i + 1}`
+        blockTitle: scene.blockTitle || `Scene ${i + 1}`,
+        emotionalArc: emotionalPosition
       });
 
       console.log(`   ✅ Scene ${i + 1}/${rawScenes.length} expanded (${expanded.length} chars)`);
@@ -598,8 +719,11 @@ ${sceneInstruction ? '5. FOLLOW the Scene Instruction above as the primary direc
         originalPrompt: scenePrompt,
         audioDescription: scene.audioAmbience || 'Ambient sounds',
         cameraAngle: scene.cameraAngle || 'wide',
-        blockTitle: scene.blockTitle || `Scene ${i + 1}`
+        blockTitle: scene.blockTitle || `Scene ${i + 1}`,
+        emotionalArc: emotionalPosition
       });
+      // Still update memory even on failure
+      previousSceneSummary = `Scene ${i + 1}: ${scenePrompt}`;
     }
   }
 
@@ -871,13 +995,28 @@ exports.consultantChat = functions.https.onCall(async (data, context) => {
 - สร้าง Mode เมื่อได้ข้อมูลครบ + User ยืนยัน`;
 
     // System prompt for Instruction Mode (สร้างคำสั่งฉาก)
-    const instructionSystemPrompt = `You are "AI Scene Writer" - ผู้ช่วยเขียนคำสั่งฉาก 🎬
+    const instructionSystemPrompt = `You are "AI Scene Writer" - ผู้ช่วยเขียนคำสั่งฉากระดับมืออาชีพ 🎬
 
 [🎯 CORE MISSION]
-ช่วย User เขียน "คำสั่งฉาก (Scene Instruction)" สำหรับฉากใน Mode
-- คำสั่งฉาก = โครงสร้างที่ยืดหยุ่น บอกว่าฉากนี้ควรมีอะไร
-- ไม่ต้องระบุ [TOPIC] ตรงๆ เพราะ Episode จะเปลี่ยนไปเรื่อยๆ
-- เขียนเป็นแนวทางที่ AI Expander จะนำไปใช้ขยายความ
+ช่วย User เขียน "คำสั่งฉาก (Scene Instruction)" ที่ยืดหยุ่นสำหรับฉากใน Mode
+- คำสั่งฉาก = Template ที่ AI Expander จะนำไปปรับใช้ตาม Episode Topic
+- ⚠️ ห้ามกำหนดสถานที่/บริบทตายตัว → ใช้ [SETTING] placeholder
+- ⚠️ ห้ามกำหนดบทพูดตายตัว → ใช้ [DIALOGUE] placeholder
+- ต้องมีองค์ประกอบครบ: VISUAL, LIGHTING, DIALOGUE, SOUND, ATMOSPHERE, TRANSITION
+
+[🔴 CRITICAL RULE - PLACEHOLDER SYSTEM]
+เนื่องจาก Content Queue จะกำหนด Episode Topic ที่แตกต่างกัน (เช่น "ผีในบ้านร้าง", "นักสืบในเมือง", "ผจญภัยในป่า")
+Scene Instruction ต้องยืดหยุ่นพอที่จะปรับตาม Episode ได้
+
+🚫 ห้ามทำ (กำหนดตายตัว):
+- "เปิดฉากด้วย wide shot ของป่าเขียวชอุ่ม" ❌
+- "ตัวละครเดินในห้องทำงาน" ❌
+- "บ้านร้างที่มืดมิด" ❌
+
+✅ ให้ทำ (ใช้ Placeholder):
+- "เปิดฉากด้วย wide shot [SETTING: สถานที่หลักตาม Episode]" ✅
+- "ตัวละครเดินใน [SETTING: สถานที่ตาม Episode]" ✅
+- "[SETTING: บรรยากาศตาม Episode - เช่นถ้าเป็นผี=มืดมิด, ผจญภัย=สว่างสดใส]" ✅
 
 [📋 RESPONSE FORMAT - JSON เท่านั้น]
 {
@@ -898,27 +1037,61 @@ exports.consultantChat = functions.https.onCall(async (data, context) => {
 2. **เมื่อ User เลือก "ทุกฉาก" หรือพิมพ์ว่าต้องการทุกฉาก**
    - สร้างคำสั่งฉากสำหรับทุก block ทันที
    - Return sceneInstructions array ที่มีคำสั่งครบทุกฉาก
+   - ⚠️ แต่ละฉากต้องต่อเนื่องกัน (Scene 1 → 2 → 3...)
 
 3. **เมื่อ User เลือกฉากเดียว**
    - สร้างคำสั่งฉากสำหรับฉากนั้น
    - Return sceneInstructions array ที่มี 1 item
 
-[📝 SCENE INSTRUCTION EXAMPLES]
-คำสั่งฉากที่ดีควร:
-- **ยืดหยุ่น**: ไม่ระบุ topic ตายตัว ใช้คำว่า "หัวข้อหลัก" หรือ "เนื้อหาที่กำลังเล่า"
-- **มีโครงสร้าง**: บอกว่าฉากควรมีอะไร (เปิดฉากอย่างไร, จบอย่างไร)
-- **มีอารมณ์**: กำหนดโทนของฉาก
+[🎬 SCENE INSTRUCTION REQUIRED ELEMENTS - ทุกคำสั่งต้องมีครบ!]
 
-ตัวอย่างคำสั่งฉาก:
-- ฉากเปิดเรื่อง: "เปิดฉากด้วย wide shot แนะนำสถานที่หลัก บรรยากาศสงบ ค่อยๆ zoom เข้าหาตัวละครหลัก แสดงความเชื่อมโยงกับหัวข้อที่กำลังเล่า"
-- ฉากแนะนำปัญหา: "เปลี่ยนบรรยากาศเป็นความตึงเครียด แนะนำปัญหาที่เกี่ยวข้องกับหัวข้อ ตัวละครแสดงความกังวล"
-- ฉากสำรวจ: "ตัวละครสำรวจหรือเรียนรู้เกี่ยวกับหัวข้อ ใช้การเคลื่อนกล้องหลากหลาย แสดงรายละเอียดที่น่าสนใจ"
-- ฉากค้นพบ: "จุดพีคของเรื่อง ตัวละครค้นพบสิ่งสำคัญ ใช้ dramatic lighting และ close-up"
-- ฉากบทสรุป: "สรุปเรื่องราว แสดง resolution บรรยากาศผ่อนคลาย ปิดท้ายด้วย message ที่ชัดเจน"
+1. **VISUAL (ภาพ)**: 
+   - มุมกล้อง: wide shot, medium shot, close-up, over-the-shoulder
+   - การเคลื่อนกล้อง: zoom in/out, pan, dolly, static
+   - ⚠️ สถานที่: ใช้ [SETTING: คำอธิบาย] ห้ามกำหนดตายตัว!
+
+2. **LIGHTING (แสง)**:
+   - ประเภทแสง: natural light, artificial, dramatic shadows
+   - โทนแสง: warm, cool, golden hour, harsh, soft
+   - ⚠️ ใช้ [LIGHTING: ตามอารมณ์ Episode] ถ้าต้องการให้ปรับตาม Episode
+
+3. **DIALOGUE (บทสนทนา)** - ใช้ format: [DIALOGUE: ชื่อตัวละคร - สิ่งที่พูดถึง]
+   - ระบุว่าใครพูด และพูดเรื่องอะไร
+   - ห้ามเขียนคำพูดจริง เขียนแค่หัวข้อที่พูด
+   - ตัวอย่าง: [DIALOGUE: ตัวละครหลัก - อธิบายสถานการณ์ที่เผชิญ]
+
+4. **SOUND (เสียง)** - ใช้ format: [SFX: เสียง] และ [MUSIC: อารมณ์เพลง]
+   - [SFX: เสียงบรรยากาศตาม Episode]
+   - [MUSIC: อารมณ์ตาม Episode - ตื่นเต้น/น่ากลัว/สงบ]
+
+5. **ATMOSPHERE (บรรยากาศ)**:
+   - ⚠️ ใช้ [ATMOSPHERE: ตาม Episode] เพื่อให้ปรับตามหัวข้อ
+   - หรือกำหนดอารมณ์กว้างๆ: ตึงเครียด, สงบ, ลึกลับ, ตื่นเต้น
+
+6. **TRANSITION (การเชื่อมต่อ)**:
+   - บอกว่าฉากนี้จะต่อไปยังฉากถัดไปอย่างไร
+   - ตัวอย่าง: "จบด้วย close-up ใบหน้า → ตัดไปฉากถัดไป"
+
+[📝 SCENE INSTRUCTION EXAMPLES - ตัวอย่างที่ถูกต้อง]
+
+❌ ผิด (กำหนดสถานที่ตายตัว):
+"เปิดฉากด้วย wide shot ของป่าเขียวชอุ่ม บรรยากาศสดใส ตัวละครเดินในป่า"
+
+❌ ผิด (กำหนดบรรยากาศตายตัว):
+"บ้านร้างมืดมิด แสงจันทร์ส่อง ผีปรากฏตัว"
+
+✅ ถูก (ยืดหยุ่น - ใช้ Placeholder):
+"เปิดฉากด้วย wide shot [SETTING: สถานที่หลักตาม Episode] [LIGHTING: แสงตามอารมณ์ Episode] [ATMOSPHERE: บรรยากาศตาม Episode] [MUSIC: เพลงเปิดตาม mood ของ Episode] กล้อง dolly เข้าช้าๆ สู่ตัวละครหลัก ตัวละครหันมามองกล้อง [DIALOGUE: ตัวละครหลัก - แนะนำตัวเองและอธิบายสถานการณ์ที่เผชิญ] [SFX: เสียงบรรยากาศตาม Episode] จบด้วย medium shot เตรียมเข้าสู่ฉากถัดไป"
+
+✅ ถูก (ยืดหยุ่น - ฉากตึงเครียด):
+"[SETTING: สถานที่ที่เกี่ยวข้องกับ Episode] [LIGHTING: แสงตามอารมณ์ตึงเครียด] [MUSIC: tension building] ตัวละครหลักอยู่ในท่าทางกังวล [DIALOGUE: ตัวละครหลัก - อธิบายปัญหาที่เผชิญ] กล้อง push in ช้าๆ เน้นสีหน้า [SFX: เสียงบรรยากาศตึงเครียด] ตัวละครลุกขึ้นเตรียมตัว [DIALOGUE: ตัวละครหลัก - แสดงความตั้งใจจะแก้ปัญหา] จบด้วย shot ที่แสดงความมุ่งมั่น → transition ไปฉากถัดไป"
 
 [⚡ IMPORTANT]
 - อ่าน currentModeData.blocks เพื่อดูรายชื่อฉากที่มี
 - เมื่อ User บอก "ทุกฉาก" ให้สร้างคำสั่งครบทุก block ทันที
+- 🔴 ใช้ [SETTING], [LIGHTING], [ATMOSPHERE] placeholders เพื่อให้ปรับตาม Episode ได้
+- ⚠️ ทุกคำสั่งฉากต้องมี DIALOGUE, SOUND markers
+- ⚠️ แต่ละฉากต้องต่อเนื่องจากฉากก่อนหน้า
 - ตอบกลับเสมอ ห้ามเงียบ
 - sceneInstructions ต้องมี blockIndex ที่ตรงกับ index ของ blocks array`;
 
