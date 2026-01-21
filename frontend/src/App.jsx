@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, FolderKanban, Settings, LogIn, LogOut, User, Share2, Wand2, ShoppingBag, Shield, Users, Sparkles, Coins, Video, ChevronDown, Mic, Music, Clock, BookOpen, Download } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Settings, LogIn, LogOut, User, Share2, Wand2, ShoppingBag, Shield, Users, Sparkles, Coins, Video, ChevronDown, Mic, Music, Clock, BookOpen, Download, Menu, X } from 'lucide-react';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -106,6 +106,7 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     console.log("Setting up auth listener");
@@ -182,9 +183,21 @@ return (
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
     </div>
 
+    {/* Mobile Overlay */}
+    {sidebarOpen && (
+      <div 
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+        onClick={() => setSidebarOpen(false)}
+      />
+    )}
+
     {/* Sidebar */}
-    <aside className="relative w-64 bg-black/30 backdrop-blur-2xl border-r border-white/10 flex flex-col shadow-2xl z-10">
-      <div className="h-16 px-4 border-b border-white/10 flex items-center">
+    <aside className={`
+      fixed md:relative inset-y-0 left-0 w-64 bg-black/30 backdrop-blur-2xl border-r border-white/10 flex flex-col shadow-2xl z-50
+      transform transition-transform duration-300 ease-in-out
+      ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+    `}>
+      <div className="h-16 px-4 border-b border-white/10 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-lg shadow-red-500/30">
             <Sparkles className="text-white" size={20} />
@@ -194,8 +207,15 @@ return (
             <p className="text-[10px] text-red-300/60 font-medium">Content Automation</p>
           </div>
         </div>
+        {/* Close button for mobile */}
+        <button 
+          onClick={() => setSidebarOpen(false)}
+          className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
+        >
+          <X size={20} className="text-white" />
+        </button>
       </div>
-      <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-scrollbar" onClick={() => setSidebarOpen(false)}>
         <NavItem to="/" icon={LayoutDashboard} label={t('common.dashboard')} />
         
         {/* VDO Creator Dropdown */}
@@ -227,16 +247,23 @@ return (
 
     <div className="flex-1 flex flex-col min-w-0 relative z-10">
       {/* Header */}
-      <header className="h-16 bg-black/20 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-8 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          <h2 className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-white to-red-200">Studio Dashboard</h2>
+      <header className="h-16 bg-black/20 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-4 md:px-8 shadow-lg">
+        {/* Mobile Menu Button */}
+        <button 
+          onClick={() => setSidebarOpen(true)}
+          className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors mr-2"
+        >
+          <Menu size={24} className="text-white" />
+        </button>
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse hidden sm:block" />
+          <h2 className="text-base md:text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-white to-red-200 truncate">Studio Dashboard</h2>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           {user ? (
-            <div className="flex items-center gap-4">
-              <div className="group flex items-center gap-3 px-4 py-2 bg-white/10 rounded-xl border border-white/10 hover:bg-white/20 hover:border-white/20 transition-all duration-300 cursor-pointer">
+            <div className="flex items-center gap-2 md:gap-4">
+              <div className="group flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 bg-white/10 rounded-xl border border-white/10 hover:bg-white/20 hover:border-white/20 transition-all duration-300 cursor-pointer">
                 {user.photoURL ? (
                   <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-lg border-2 border-white/20 group-hover:scale-110 transition-transform" />
                 ) : (
@@ -244,14 +271,14 @@ return (
                     <User size={16} />
                   </div>
                 )}
-                <div>
+                <div className="hidden sm:block">
                   <p className="text-sm font-semibold text-white">{user.displayName || 'User'}</p>
                   <p className="text-[10px] text-slate-400">{user.email?.split('@')[0]}</p>
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="p-2.5 bg-red-500/20 hover:bg-red-500 rounded-xl transition-all duration-300 text-red-300 hover:text-white hover:scale-110 border border-red-500/30"
+                className="p-2 md:p-2.5 bg-red-500/20 hover:bg-red-500 rounded-xl transition-all duration-300 text-red-300 hover:text-white hover:scale-110 border border-red-500/30"
                 title={t('common.logout')}
               >
                 <LogOut size={18} />

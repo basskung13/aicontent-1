@@ -26,24 +26,24 @@ const PlatformIcon = ({ platform, size = 16 }) => {
 
 // Stat Card Component
 const StatCard = ({ icon: Icon, label, value, subValue, trend, trendUp, color, loading }) => (
-    <div className={`group relative bg-gradient-to-br from-${color}-900/30 to-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/10 p-5 hover:border-${color}-500/30 hover:scale-[1.03] transition-all duration-500 cursor-pointer overflow-hidden`}>
+    <div className={`group relative bg-gradient-to-br from-${color}-900/30 to-slate-900/50 backdrop-blur-xl rounded-2xl md:rounded-3xl border border-white/10 p-3 md:p-5 hover:border-${color}-500/30 hover:scale-[1.02] md:hover:scale-[1.03] transition-all duration-500 cursor-pointer overflow-hidden`}>
         {/* Animated Glow Effect */}
         <div className={`absolute inset-0 bg-gradient-to-r from-${color}-500/0 via-${color}-500/5 to-${color}-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000`} />
-        <div className={`absolute top-0 right-0 w-32 h-32 bg-${color}-500/10 rounded-full blur-3xl group-hover:bg-${color}-500/20 transition-all duration-500`} />
+        <div className={`absolute top-0 right-0 w-20 md:w-32 h-20 md:h-32 bg-${color}-500/10 rounded-full blur-3xl group-hover:bg-${color}-500/20 transition-all duration-500`} />
         
-        <div className="flex items-start justify-between relative">
-            <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-${color}-400 to-${color}-600 flex items-center justify-center shadow-lg shadow-${color}-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
-                    <Icon className="text-white" size={28} />
+        <div className="flex flex-col md:flex-row md:items-start justify-between relative gap-2">
+            <div className="flex items-center gap-2 md:gap-4">
+                <div className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-gradient-to-br from-${color}-400 to-${color}-600 flex items-center justify-center shadow-lg shadow-${color}-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 flex-shrink-0`}>
+                    <Icon className="text-white" size={20} />
                 </div>
-                <div>
+                <div className="min-w-0">
                     {loading ? (
-                        <Loader2 size={24} className="animate-spin text-slate-400" />
+                        <Loader2 size={20} className="animate-spin text-slate-400" />
                     ) : (
-                        <p className="text-3xl font-black text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-${color}-200 transition-all">{value}</p>
+                        <p className="text-xl md:text-3xl font-black text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-${color}-200 transition-all truncate">{value}</p>
                     )}
-                    <p className="text-sm text-slate-400 font-medium">{label}</p>
-                    {subValue && <p className="text-xs text-slate-500 mt-0.5">{subValue}</p>}
+                    <p className="text-xs md:text-sm text-slate-400 font-medium truncate">{label}</p>
+                    {subValue && <p className="text-[10px] md:text-xs text-slate-500 mt-0.5 truncate">{subValue}</p>}
                 </div>
             </div>
             {trend !== undefined && (
@@ -283,7 +283,7 @@ export default function Dashboard() {
     ];
 
     return (
-        <div className="min-h-screen flex flex-col p-8 gap-6 bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 text-white font-sans overflow-auto relative">
+        <div className="min-h-screen flex flex-col p-4 md:p-6 lg:p-8 gap-4 md:gap-6 bg-gradient-to-br from-red-900 via-slate-900 to-slate-950 text-white font-sans overflow-auto relative">
             {/* Subtle Background Effect */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/10 rounded-full blur-3xl" />
@@ -291,44 +291,45 @@ export default function Dashboard() {
             </div>
 
             {/* Header - Unified Box Style */}
-            <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl overflow-hidden z-10">
+            <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 p-3 md:p-4 rounded-2xl shadow-xl overflow-hidden z-10">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500" />
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                    <div className="flex items-center gap-3 md:gap-4">
                         <div className="relative group">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
-                                <LayoutDashboard className="text-white" size={32} />
+                            <div className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/30 group-hover:scale-110 transition-transform duration-300">
+                                <LayoutDashboard className="text-white" size={24} />
                             </div>
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
+                            <div className="absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 bg-green-500 rounded-full border-2 border-slate-900" />
                         </div>
                         <div>
-                            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
+                            <h1 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-red-100 to-orange-200 tracking-tight">
                                 Dashboard
                             </h1>
-                            <p className="text-base text-slate-400 font-light flex items-center gap-2 mt-1">
+                            <p className="text-sm md:text-base text-slate-400 font-light flex items-center gap-2 mt-1">
                                 <span className="inline-block w-2 h-2 bg-green-500 rounded-full" />
                                 ภาพรวมทั้งหมดในที่เดียว
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-between sm:justify-end">
                         <Link
                             to="/learn?section=extension-update"
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/40 hover:to-blue-600/40 backdrop-blur-xl rounded-xl border border-purple-500/30 hover:border-purple-500/50 text-sm text-purple-300 hover:text-white transition-all group"
+                            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/40 hover:to-blue-600/40 backdrop-blur-xl rounded-xl border border-purple-500/30 hover:border-purple-500/50 text-xs md:text-sm text-purple-300 hover:text-white transition-all group"
                         >
                             <Download size={16} className="group-hover:animate-bounce" />
-                            <span className="font-medium">Update Extension</span>
+                            <span className="font-medium hidden sm:inline">Update Extension</span>
                         </Link>
-                        <div className="px-4 py-2 bg-black/30 backdrop-blur-xl rounded-xl border border-white/10 text-sm text-slate-300">
-                            <Calendar size={16} className="inline mr-2 text-orange-400" />
-                            {new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        <div className="px-2 md:px-4 py-2 bg-black/30 backdrop-blur-xl rounded-xl border border-white/10 text-xs md:text-sm text-slate-300">
+                            <Calendar size={16} className="inline mr-1 md:mr-2 text-orange-400" />
+                            <span className="hidden md:inline">{new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                            <span className="md:hidden">{new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</span>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Main Stats Grid - Unified Color Scheme */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 relative z-10">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4 relative z-10">
                 <StatCard 
                     icon={Wallet} 
                     label="ยอดเงินคงเหลือ" 
@@ -371,7 +372,7 @@ export default function Dashboard() {
             </div>
 
             {/* Charts & Activity Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 relative z-10">
                 {/* Activity Chart */}
                 <div className="lg:col-span-2 group relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6 hover:border-orange-500/30 transition-all duration-300 overflow-hidden">
                     {/* Subtle Glow Effect */}
