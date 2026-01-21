@@ -1598,10 +1598,10 @@ const ExpanderCreator = () => {
                 
                 {/* === CREATOR TAB === */}
                 {activeTab === 'creator' && (
-                <div className="grid grid-cols-12 gap-6 items-start">
+                <div className="grid grid-cols-12 gap-6">
                     {/* Left Panel: Block Library (แยกหมวดหมู่) */}
-                    <div className="col-span-5 self-stretch">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 h-full flex flex-col">
+                    <div className="col-span-5">
+                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4" style={{ height: '720px' }}>
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-white font-bold flex items-center gap-2">
                                     📦 กล่องที่มี
@@ -1614,22 +1614,22 @@ const ExpanderCreator = () => {
                                         onChange={(e) => setBlockSearchQuery(e.target.value)}
                                         className="w-24 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-orange-500"
                                     />
-                                    <div className="glass-dropdown-wrapper">
+                                    <div className="glass-dropdown-wrapper w-[100px]">
                                         <GlassDropdown
                                             value={filterGroupId}
                                             onChange={setFilterGroupId}
                                             options={[
-                                                { value: 'all', label: '📁 ทุก Group' },
-                                                ...customGroups.map(g => ({ value: g.id, label: `${g.icon || '📌'} ${g.name}` }))
+                                                { value: 'all', label: 'ทุก Group' },
+                                                ...customGroups.map(g => ({ value: g.id, label: g.name }))
                                             ]}
-                                            buttonClassName="bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-white text-xs cursor-pointer hover:bg-black/60 transition-all"
-                                            minWidth={140}
+                                            buttonClassName="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-white text-xs cursor-pointer hover:bg-black/60 transition-all truncate"
+                                            minWidth={120}
                                         />
                                         <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
                                     </div>
                                 </div>
                             </div>
-                            <div className="space-y-3 overflow-y-auto overflow-x-visible pr-1 flex-1">
+                            <div className="space-y-3 overflow-y-auto pr-1" style={{ height: '650px' }}>
                                 {/* All Groups (Default + Custom) - ทุก Block ลบ/ย้าย/ฟังเสียงได้ */}
                                 {customGroups
                                     .filter(group => filterGroupId === 'all' || group.id === filterGroupId)
