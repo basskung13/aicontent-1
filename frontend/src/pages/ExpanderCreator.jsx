@@ -127,6 +127,8 @@ const ExpanderCreator = () => {
     // Custom Groups State
     const [customGroups, setCustomGroups] = useState([]);
     const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+    const [blockSearchQuery, setBlockSearchQuery] = useState('');
+    const [filterGroupId, setFilterGroupId] = useState('all');
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupIcon, setNewGroupIcon] = useState('📌');
     const [showMoveBlockModal, setShowMoveBlockModal] = useState(false);
@@ -1588,14 +1590,37 @@ const ExpanderCreator = () => {
                 {activeTab === 'creator' && (
                 <div className="grid grid-cols-12 gap-6">
                     {/* Left Panel: Block Library (แยกหมวดหมู่) */}
-                    <div className="col-span-5 flex flex-col">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 flex flex-col flex-1">
-                            <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                                📦 กล่องที่มี
-                            </h3>
-                            <div className="space-y-3 flex-1 overflow-y-auto overflow-x-visible pr-1" style={{ overflow: 'visible auto' }}>
+                    <div className="col-span-5">
+                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-white font-bold flex items-center gap-2">
+                                    📦 กล่องที่มี
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="ค้นหา..."
+                                        value={blockSearchQuery}
+                                        onChange={(e) => setBlockSearchQuery(e.target.value)}
+                                        className="w-24 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-orange-500"
+                                    />
+                                    <select
+                                        value={filterGroupId}
+                                        onChange={(e) => setFilterGroupId(e.target.value)}
+                                        className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-orange-500"
+                                    >
+                                        <option value="all">ทุก Group</option>
+                                        {customGroups.map(g => (
+                                            <option key={g.id} value={g.id}>{g.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="space-y-3 overflow-y-auto overflow-x-visible pr-1" style={{ maxHeight: 'calc(100vh - 300px)', overflow: 'visible auto' }}>
                                 {/* All Groups (Default + Custom) - ทุก Block ลบ/ย้าย/ฟังเสียงได้ */}
-                                {customGroups.map(group => (
+                                {customGroups
+                                    .filter(group => filterGroupId === 'all' || group.id === filterGroupId)
+                                    .map(group => (
                                     <div key={group.id} className={`bg-white/5 backdrop-blur-sm border ${group.isDefault ? 'border-white/10' : 'border-red-500/20'} rounded-lg`}>
                                         <button 
                                             onClick={() => toggleCategory(group.id)}
@@ -1618,7 +1643,9 @@ const ExpanderCreator = () => {
                                         </button>
                                         {expandedCategories[group.id] !== false && (
                                             <div className="px-2 pb-2 space-y-1">
-                                                {(group.blocks || []).map((block) => (
+                                                {(group.blocks || [])
+                                                    .filter(block => !blockSearchQuery || block.name.toLowerCase().includes(blockSearchQuery.toLowerCase()))
+                                                    .map((block) => (
                                                     <div
                                                         key={block.id}
                                                         draggable
@@ -1965,24 +1992,6 @@ const ExpanderCreator = () => {
                                         className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
                                     />
                                 </div>
-                                <button
-                                    onClick={handleTest}
-                                    disabled={testing}
-                                    className="group relative w-full py-3 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 hover:from-emerald-500 hover:via-teal-400 hover:to-cyan-400 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] transition-all duration-300 overflow-hidden"
-                                >
-                                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
-                                    {testing ? (
-                                        <>
-                                            <Loader2 size={16} className="animate-spin relative z-10" />
-                                            <span className="relative z-10">กำลังทดสอบ...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <TestTube size={16} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />
-                                            <span className="relative z-10">ทดสอบ Expand</span>
-                                        </>
-                                    )}
-                                </button>
                                 {testResult && (
                                     <div className="bg-white/5 border border-white/10 rounded-lg p-3 relative">
                                         <button
@@ -1998,32 +2007,50 @@ const ExpanderCreator = () => {
                             </div>
                         </div>
                         
-                        {/* Action Buttons */}
+                        {/* Action Buttons - 3 ปุ่มเรียงกัน ธีมส้มเหมือนกัน */}
                         <div className="flex gap-3">
                             <button
-                                onClick={handleSave}
-                                disabled={saving}
-                                className="group relative flex-1 py-4 bg-gradient-to-r from-violet-600 via-purple-500 to-fuchsia-500 hover:from-violet-500 hover:via-purple-400 hover:to-fuchsia-400 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl shadow-purple-500/40 hover:shadow-purple-500/60 hover:scale-[1.02] transition-all duration-300 overflow-hidden"
+                                onClick={handleTest}
+                                disabled={testing}
+                                className="group relative flex-1 py-3 bg-gradient-to-r from-orange-600 via-amber-500 to-yellow-500 hover:from-orange-500 hover:via-amber-400 hover:to-yellow-400 rounded-xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] transition-all duration-300 overflow-hidden"
                             >
                                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
-                                {saving ? (
+                                {testing ? (
                                     <>
-                                        <Loader2 size={18} className="animate-spin relative z-10" />
-                                        <span className="relative z-10">กำลังบันทึก...</span>
+                                        <Loader2 size={16} className="animate-spin relative z-10" />
+                                        <span className="relative z-10">ทดสอบ...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Save size={18} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />
-                                        <span className="relative z-10">{editingExpander ? 'อัปเดต Expander' : 'บันทึก Expander'}</span>
+                                        <TestTube size={16} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />
+                                        <span className="relative z-10">ทดสอบ</span>
                                     </>
                                 )}
                             </button>
                             <button
-                                className="group relative px-8 py-4 bg-gradient-to-r from-amber-500 via-orange-400 to-rose-400 hover:from-amber-400 hover:via-orange-300 hover:to-rose-300 rounded-2xl text-white font-bold flex items-center gap-2 shadow-xl shadow-amber-500/40 hover:shadow-amber-500/60 hover:scale-105 transition-all duration-300 overflow-hidden"
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="group relative flex-1 py-3 bg-gradient-to-r from-amber-600 via-orange-500 to-red-500 hover:from-amber-500 hover:via-orange-400 hover:to-red-400 rounded-xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-[1.02] transition-all duration-300 overflow-hidden"
                             >
-                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
-                                <Upload size={18} className="relative z-10 group-hover:rotate-12 group-hover:-translate-y-1 transition-all duration-300" />
-                                <span className="relative z-10">เผยแพร่ขาย</span>
+                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+                                {saving ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin relative z-10" />
+                                        <span className="relative z-10">บันทึก...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save size={16} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />
+                                        <span className="relative z-10">{editingExpander ? 'อัปเดต' : 'บันทึก'}</span>
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                className="group relative flex-1 py-3 bg-gradient-to-r from-rose-600 via-orange-500 to-amber-500 hover:from-rose-500 hover:via-orange-400 hover:to-amber-400 rounded-xl text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:scale-[1.02] transition-all duration-300 overflow-hidden"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+                                <Upload size={16} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />
+                                <span className="relative z-10">เผยแพร่</span>
                             </button>
                         </div>
                     </div>
