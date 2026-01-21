@@ -1614,19 +1614,22 @@ const ExpanderCreator = () => {
                                         onChange={(e) => setBlockSearchQuery(e.target.value)}
                                         className="w-24 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-orange-500"
                                     />
-                                    <select
-                                        value={filterGroupId}
-                                        onChange={(e) => setFilterGroupId(e.target.value)}
-                                        className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-orange-500"
-                                    >
-                                        <option value="all">ทุก Group</option>
-                                        {customGroups.map(g => (
-                                            <option key={g.id} value={g.id}>{g.name}</option>
-                                        ))}
-                                    </select>
+                                    <div className="glass-dropdown-wrapper">
+                                        <GlassDropdown
+                                            value={filterGroupId}
+                                            onChange={setFilterGroupId}
+                                            options={[
+                                                { value: 'all', label: '📁 ทุก Group' },
+                                                ...customGroups.map(g => ({ value: g.id, label: `${g.icon || '📌'} ${g.name}` }))
+                                            ]}
+                                            buttonClassName="bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-white text-xs cursor-pointer hover:bg-black/60 transition-all"
+                                            minWidth={140}
+                                        />
+                                        <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
+                                    </div>
                                 </div>
                             </div>
-                            <div className="space-y-3 overflow-y-auto overflow-x-visible pr-1 flex-1" style={{ maxHeight: '600px' }}>
+                            <div className="space-y-3 overflow-y-auto overflow-x-visible pr-1 flex-1">
                                 {/* All Groups (Default + Custom) - ทุก Block ลบ/ย้าย/ฟังเสียงได้ */}
                                 {customGroups
                                     .filter(group => filterGroupId === 'all' || group.id === filterGroupId)
