@@ -297,7 +297,8 @@ const ContentQueue = ({ projectId }) => {
                 </button>
             </div>
 
-            {/* AI Episode Generator Button */}
+            {/* AI Episode Generator Button - Only show in Queue tab */}
+            {activeTab === 'queue' && (
             <button
                 onClick={() => setIsAiOpen(!isAiOpen)}
                 className="w-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4 hover:from-purple-500/30 hover:to-pink-500/30 transition-all group"
@@ -315,9 +316,10 @@ const ContentQueue = ({ projectId }) => {
                     <ChevronDown className={twMerge("text-purple-300 transition-transform", isAiOpen && "rotate-180")} size={20} />
                 </div>
             </button>
+            )}
 
-            {/* AI Chat Panel */}
-            {isAiOpen && (
+            {/* AI Chat Panel - Only show in Queue tab */}
+            {activeTab === 'queue' && isAiOpen && (
                 <div className="bg-slate-900/80 border border-purple-500/20 rounded-xl overflow-hidden">
                     {/* Chat Messages */}
                     <div className="h-64 overflow-y-auto p-4 space-y-3">
@@ -373,7 +375,8 @@ const ContentQueue = ({ projectId }) => {
                 </div>
             )}
 
-            {/* Manual Add Episode */}
+            {/* Manual Add Episode - Only show in Queue tab */}
+            {activeTab === 'queue' && (
             <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                 <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">➕ เพิ่ม Episode ด้วยตนเอง</h4>
                 <div className="flex gap-3">
@@ -393,6 +396,7 @@ const ContentQueue = ({ projectId }) => {
                     </button>
                 </div>
             </div>
+            )}
 
             {/* Episode List - Queue Tab */}
             {activeTab === 'queue' && (

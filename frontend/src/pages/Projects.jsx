@@ -571,6 +571,22 @@ export default function Projects() {
         setTimeout(() => setCopiedIndex(null), 2000);
     };
 
+    const handleDeleteProject = async (e, projectId) => {
+        e.stopPropagation();
+        if (!currentUser) return;
+        if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบโปรเจคนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) return;
+
+        try {
+            await deleteDoc(doc(db, 'users', currentUser.uid, 'projects', projectId));
+            if (selectedProject?.id === projectId) {
+                setSelectedProject(null);
+            }
+            console.log('✅ Project deleted:', projectId);
+        } catch (error) {
+            console.error('Error deleting project:', error);
+        }
+    };
+
     const handleStartEdit = (e, project) => {
         e.stopPropagation();
         setEditingProjectId(project.id);
@@ -934,6 +950,14 @@ export default function Projects() {
                                                             >
                                                                 <Pencil size={12} />
                                                             </button>
+                                                            {/* Delete Button */}
+                                                            <button
+                                                                onClick={(e) => handleDeleteProject(e, project.id)}
+                                                                className="p-1.5 bg-black/50 hover:bg-red-500/70 rounded-full text-white hover:text-red-300 backdrop-blur-sm transition-colors"
+                                                                title="Delete Project"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
                                                         </div>
                                                     )}
                                                 </div>
@@ -1030,7 +1054,7 @@ export default function Projects() {
                                 <button
                                     onClick={() => setActiveTab('monitor')}
                                     className={`group relative px-5 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 text-sm font-bold overflow-hidden ${activeTab === 'monitor'
-                                        ? 'bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 text-white shadow-xl shadow-purple-500/40 scale-105'
+                                        ? 'bg-gradient-to-r from-orange-600 via-orange-500 to-red-500 text-white shadow-xl shadow-orange-500/40 scale-105'
                                         : 'text-slate-400 hover:bg-white/10 hover:text-white'
                                         }`}
                                 >
@@ -1040,21 +1064,9 @@ export default function Projects() {
                                     {activeTab === 'monitor' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
                                 </button>
                                 <button
-                                    onClick={() => setActiveTab('history')}
-                                    className={`group relative px-5 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 text-sm font-bold overflow-hidden ${activeTab === 'history'
-                                        ? 'bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white shadow-xl shadow-blue-500/40 scale-105'
-                                        : 'text-slate-400 hover:bg-white/10 hover:text-white'
-                                        }`}
-                                >
-                                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                    <List size={16} className={`relative z-10 transition-all duration-300 ${activeTab === 'history' ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
-                                    <span className="relative z-10">Execution History</span>
-                                    {activeTab === 'history' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
-                                </button>
-                                <button
                                     onClick={() => setActiveTab('queue')}
                                     className={`group relative px-5 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 text-sm font-bold overflow-hidden ${activeTab === 'queue'
-                                        ? 'bg-gradient-to-r from-yellow-600 via-yellow-500 to-orange-500 text-white shadow-xl shadow-yellow-500/40 scale-105'
+                                        ? 'bg-gradient-to-r from-orange-600 via-orange-500 to-red-500 text-white shadow-xl shadow-orange-500/40 scale-105'
                                         : 'text-slate-400 hover:bg-white/10 hover:text-white'
                                         }`}
                                 >
@@ -1062,6 +1074,18 @@ export default function Projects() {
                                     <Layers size={16} className={`relative z-10 transition-all duration-300 ${activeTab === 'queue' ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
                                     <span className="relative z-10">Content Queue</span>
                                     {activeTab === 'queue' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('history')}
+                                    className={`group relative px-5 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 text-sm font-bold overflow-hidden ${activeTab === 'history'
+                                        ? 'bg-gradient-to-r from-orange-600 via-orange-500 to-red-500 text-white shadow-xl shadow-orange-500/40 scale-105'
+                                        : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                                        }`}
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                    <List size={16} className={`relative z-10 transition-all duration-300 ${activeTab === 'history' ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
+                                    <span className="relative z-10">Execution History</span>
+                                    {activeTab === 'history' && <span className="absolute inset-0 rounded-xl bg-white/10 animate-pulse" />}
                                 </button>
                             </div>
 
@@ -1422,16 +1446,16 @@ export default function Projects() {
                                     {/* ========================================== */}
                                     {/* TEST PROMPT PIPELINE SECTION */}
                                     {/* ========================================== */}
-                                    <div className="mt-8 bg-gradient-to-br from-purple-900/20 via-slate-900/40 to-indigo-900/20 backdrop-blur-xl rounded-2xl border border-purple-500/20 p-6 shadow-xl">
+                                    <div className="mt-8 bg-gradient-to-br from-orange-900/20 via-slate-900/40 to-red-900/20 backdrop-blur-xl rounded-2xl border border-orange-500/20 p-6 shadow-xl">
                                         {/* Header */}
                                         <div className="flex items-center justify-between mb-6">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
                                                     <FlaskConical size={20} className="text-white" />
                                                 </div>
                                                 <div>
                                                     <h3 className="text-lg font-bold text-white">Test Prompt Pipeline</h3>
-                                                    <p className="text-xs text-purple-300/60">ทดสอบสร้าง Prompts จาก Mode + Expander ก่อนใช้งานจริง</p>
+                                                    <p className="text-xs text-orange-300/60">ทดสอบสร้าง Prompts จาก Mode + Expander ก่อนใช้งานจริง</p>
                                                 </div>
                                             </div>
                                             <button
@@ -1440,7 +1464,7 @@ export default function Projects() {
                                                 className={`group relative flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 overflow-hidden ${
                                                     !selectedModeId 
                                                         ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                                                        : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:scale-105 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50'
+                                                        : 'bg-gradient-to-r from-orange-600 to-red-600 text-white hover:scale-105 shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50'
                                                 }`}
                                             >
                                                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
