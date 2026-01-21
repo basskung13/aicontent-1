@@ -1569,12 +1569,12 @@ const ExpanderCreator = () => {
                 {activeTab === 'creator' && (
                 <div className="grid grid-cols-12 gap-6">
                     {/* Left Panel: Block Library (แยกหมวดหมู่) */}
-                    <div className="col-span-3 space-y-3">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4">
+                    <div className="col-span-5 space-y-3">
+                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 h-full">
                             <h3 className="text-white font-bold mb-3 flex items-center gap-2">
                                 📦 กล่องที่มี
                             </h3>
-                            <div className="space-y-3 max-h-[500px] overflow-y-auto overflow-x-visible pr-1" style={{ overflow: 'visible auto' }}>
+                            <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-visible pr-1" style={{ overflow: 'visible auto' }}>
                                 {/* All Groups (Default + Custom) - ทุก Block ลบ/ย้าย/ฟังเสียงได้ */}
                                 {customGroups.map(group => (
                                     <div key={group.id} className={`bg-white/5 backdrop-blur-sm border ${group.isDefault ? 'border-white/10' : 'border-red-500/20'} rounded-lg`}>
@@ -1706,7 +1706,7 @@ const ExpanderCreator = () => {
                     </div>
                     
                     {/* Center Panel: Expander Builder */}
-                    <div className="col-span-9 space-y-4">
+                    <div className="col-span-7 space-y-4">
                         {/* Expander Info */}
                         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                             <div className="grid grid-cols-2 gap-6 mb-6">
