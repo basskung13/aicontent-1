@@ -503,6 +503,25 @@ const ExpanderCreator = () => {
         ));
     };
     
+    // === EDIT BLOCK NAME ===
+    const handleEditBlockName = async (groupId, blockId, newName) => {
+        const group = customGroups.find(g => g.id === groupId);
+        if (!group) return;
+        
+        const updatedBlocks = (group.blocks || []).map(b => 
+            b.id === blockId ? { ...b, name: newName } : b
+        );
+        
+        if (user) {
+            await updateDoc(doc(db, 'users', user.uid, 'customGroups', groupId), {
+                blocks: updatedBlocks
+            });
+        }
+        setCustomGroups(prev => prev.map(g => 
+            g.id === groupId ? { ...g, blocks: updatedBlocks } : g
+        ));
+    };
+    
     // === DRAG REORDER FOR SELECTED BLOCKS ===
     const handleBlockDragStart = (e, index) => {
         setDraggedBlockIndex(index);
@@ -1569,12 +1588,12 @@ const ExpanderCreator = () => {
                 {activeTab === 'creator' && (
                 <div className="grid grid-cols-12 gap-6">
                     {/* Left Panel: Block Library (แยกหมวดหมู่) */}
-                    <div className="col-span-5 space-y-3">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 h-full">
+                    <div className="col-span-5 flex flex-col">
+                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 flex flex-col flex-1">
                             <h3 className="text-white font-bold mb-3 flex items-center gap-2">
                                 📦 กล่องที่มี
                             </h3>
-                            <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-visible pr-1" style={{ overflow: 'visible auto' }}>
+                            <div className="space-y-3 flex-1 overflow-y-auto overflow-x-visible pr-1" style={{ overflow: 'visible auto' }}>
                                 {/* All Groups (Default + Custom) - ทุก Block ลบ/ย้าย/ฟังเสียงได้ */}
                                 {customGroups.map(group => (
                                     <div key={group.id} className={`bg-white/5 backdrop-blur-sm border ${group.isDefault ? 'border-white/10' : 'border-red-500/20'} rounded-lg`}>
@@ -1617,6 +1636,20 @@ const ExpanderCreator = () => {
                                                             <span className="text-base shrink-0">{block.icon}</span>
                                                         ) : null}
                                                         <span className="flex-1 truncate mr-1">{block.name}</span>
+                                                        {/* Edit Block Name Button */}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const newName = prompt('แก้ไขชื่อ Block:', block.name);
+                                                                if (newName && newName.trim() && newName !== block.name) {
+                                                                    handleEditBlockName(group.id, block.id, newName.trim());
+                                                                }
+                                                            }}
+                                                            className="p-1 hover:bg-white/20 rounded text-slate-400 hover:text-yellow-400 shrink-0"
+                                                            title="แก้ไขชื่อ"
+                                                        >
+                                                            <Edit3 size={12} />
+                                                        </button>
                                                         {/* Dropdown Menu Button */}
                                                         <button
                                                             onClick={(e) => {
