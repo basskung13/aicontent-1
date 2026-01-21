@@ -1706,7 +1706,7 @@ const ExpanderCreator = () => {
                     </div>
                     
                     {/* Center Panel: Expander Builder */}
-                    <div className="col-span-6 space-y-4">
+                    <div className="col-span-9 space-y-4">
                         {/* Expander Info */}
                         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                             <div className="grid grid-cols-2 gap-6 mb-6">
@@ -1992,55 +1992,6 @@ const ExpanderCreator = () => {
                                 <Upload size={18} className="relative z-10 group-hover:rotate-12 group-hover:-translate-y-1 transition-all duration-300" />
                                 <span className="relative z-10">เผยแพร่ขาย</span>
                             </button>
-                        </div>
-                    </div>
-                    
-                    {/* Right Panel: Saved Expanders */}
-                    <div className="col-span-3">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4">
-                            <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                                💾 Expander ที่บันทึกไว้
-                            </h3>
-                            {savedExpanders.length === 0 ? (
-                                <p className="text-slate-400 text-sm text-center py-4">ยังไม่มี Expander ที่บันทึก</p>
-                            ) : (
-                                <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                                    {savedExpanders.map(exp => (
-                                        <div 
-                                            key={exp.id}
-                                            className="bg-black/20 border border-white/10 rounded-lg p-3 hover:bg-white/5 transition-colors"
-                                        >
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <h4 className="text-white font-medium">{exp.name}</h4>
-                                                    <p className="text-slate-400 text-xs">
-                                                        {exp.categoryId}
-                                                    </p>
-                                                    <p className="text-slate-500 text-xs mt-1">
-                                                        {exp.blocks?.length || 0} blocks
-                                                    </p>
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <button
-                                                        onClick={() => loadExpanderForEdit(exp)}
-                                                        className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded"
-                                                        title="แก้ไข"
-                                                    >
-                                                        ✏️
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteExpander(exp.id)}
-                                                        className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded"
-                                                        title="ลบ"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
