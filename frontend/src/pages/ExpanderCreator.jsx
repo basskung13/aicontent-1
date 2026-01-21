@@ -336,6 +336,16 @@ const ExpanderCreator = () => {
         }
     };
     
+    const handleEditCustomBlockName = async (blockId, newName) => {
+        if (!user) return;
+        try {
+            await updateDoc(doc(db, 'users', user.uid, 'customBlocks', blockId), { name: newName });
+            setCustomBlocks(prev => prev.map(b => b.id === blockId ? { ...b, name: newName } : b));
+        } catch (error) {
+            console.error('Error editing custom block name:', error);
+        }
+    };
+    
     // === CUSTOM GROUPS PERSISTENCE ===
     const loadCustomGroups = async () => {
         if (!user) return;
@@ -1588,10 +1598,10 @@ const ExpanderCreator = () => {
                 
                 {/* === CREATOR TAB === */}
                 {activeTab === 'creator' && (
-                <div className="grid grid-cols-12 gap-6">
+                <div className="grid grid-cols-12 gap-6 items-start">
                     {/* Left Panel: Block Library (แยกหมวดหมู่) */}
-                    <div className="col-span-5">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                    <div className="col-span-5 self-stretch">
+                        <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-4 h-full flex flex-col">
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-white font-bold flex items-center gap-2">
                                     📦 กล่องที่มี
@@ -1616,7 +1626,7 @@ const ExpanderCreator = () => {
                                     </select>
                                 </div>
                             </div>
-                            <div className="space-y-3 overflow-y-auto overflow-x-visible pr-1" style={{ maxHeight: 'calc(100vh - 300px)', overflow: 'visible auto' }}>
+                            <div className="space-y-3 overflow-y-auto overflow-x-visible pr-1 flex-1" style={{ maxHeight: '600px' }}>
                                 {/* All Groups (Default + Custom) - ทุก Block ลบ/ย้าย/ฟังเสียงได้ */}
                                 {customGroups
                                     .filter(group => filterGroupId === 'all' || group.id === filterGroupId)
@@ -1727,6 +1737,19 @@ const ExpanderCreator = () => {
                                                     ) : null}
                                                     <span className="flex-1 truncate">{block.name}</span>
                                                     <span className="text-xs bg-violet-500/30 px-1 rounded shrink-0">AI</span>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const newName = prompt('แก้ไขชื่อ Block:', block.name);
+                                                            if (newName && newName.trim() && newName !== block.name) {
+                                                                handleEditCustomBlockName(block.id, newName.trim());
+                                                            }
+                                                        }}
+                                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-yellow-500/30 rounded transition-opacity text-yellow-300"
+                                                        title="แก้ไขชื่อ"
+                                                    >
+                                                        <Edit3 size={12} />
+                                                    </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); openBlockDetail(block); }}
                                                         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/20 rounded transition-opacity"
