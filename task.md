@@ -111,6 +111,31 @@
 
 ---
 
+## Phase 6: Frontend Deployment & Auto Deploy <!-- priority: HIGH -->
+
+### 6.1 GitHub Repository <!-- id: 6.1 -->
+- [x] Push codebase to GitHub: `13Basskung/aicontent`
+- [x] Set up Git remote origin
+- [x] Configure branch: `main`
+
+### 6.2 Cloudflare Pages Deployment <!-- id: 6.2 -->
+- [x] Create Cloudflare Pages project: `aicontent`
+- [x] Connect to GitHub repository
+- [x] Configure build settings:
+  - Framework: None (Vite)
+  - Build command: `npm run build`
+  - Build output: `dist`
+  - Root directory: `frontend`
+- [x] Enable automatic deployments on push to `main`
+
+### 6.3 Custom Domain Setup <!-- id: 6.3 -->
+- [x] Configure custom domain: `aicontents.vip`
+- [x] Configure www subdomain: `www.aicontents.vip`
+- [x] SSL/HTTPS enabled
+- [x] DNS records configured via Cloudflare
+
+---
+
 ## 📊 Progress Summary
 | Phase | สถานะ | ความสำคัญ |
 |:------|:------|:---------|
@@ -119,13 +144,20 @@
 | Phase 3: Auto-Refill | ✅ เสร็จ | 🟡 กลาง |
 | Phase 4: Frontend UI | ✅ เสร็จ (Core) | 🟡 กลาง |
 | Phase 5: Cleanup | ✅ เสร็จ | 🟢 ต่ำ |
+| Phase 6: Deployment | ✅ เสร็จ | 🔴 สูง |
 
 ---
 
-## 📝 Last Updated: 2026-01-19
+## 📝 Last Updated: 2026-01-21
 
 ### Implementation Notes:
 - **Shared Logic**: `expandScenesWithTopic()`, `generateTitlesAndTags()`, `getNextEpisode()`, `getRemainingEpisodeCount()`
 - **New Collections**: `testLogs/`, `readyPrompts/`, `episodeHistory/`
 - **New Settings**: `episodeSelection`, `autoRefillEnabled`, `autoRefillThreshold`, `autoRefillCount`
 - **New Functions**: `autoGenerateEpisodes`, `cleanupExpiredTestLogs`, `cleanupOldEpisodeHistory`
+
+### Deployment Notes:
+- **Live URL**: https://aicontents.vip
+- **GitHub Repo**: https://github.com/13Basskung/aicontent
+- **Hosting**: Cloudflare Pages (Project: `aicontent`)
+- **Auto Deploy**: ทุกครั้งที่ push ไป branch `main` → เว็บอัปเดตอัตโนมัติ

@@ -1,7 +1,7 @@
 # 📋 Implementation Plan: Content Queue & Prompt Pipeline
 
-> **วันที่อัปเดต:** 2026-01-19  
-> **สถานะ:** ✅ ดำเนินการเสร็จสิ้น Phase 1-5
+> **วันที่อัปเดต:** 2026-01-21  
+> **สถานะ:** ✅ ดำเนินการเสร็จสิ้น Phase 1-6
 
 ---
 
@@ -58,8 +58,9 @@
 | **3** | Backend: Auto-Refill | ✅ เสร็จ |
 | **4** | Frontend: Settings UI + Status Badge + History Tab | ✅ เสร็จ |
 | **5** | Cleanup Functions (TTL) | ✅ เสร็จ |
+| **6** | Frontend Deployment & Auto Deploy (Cloudflare Pages) | ✅ เสร็จ |
 
-**สรุป:** ดำเนินการเสร็จสิ้นทั้ง 5 Phase
+**สรุป:** ดำเนินการเสร็จสิ้นทั้ง 6 Phase
 
 ---
 
@@ -86,3 +87,27 @@
 
 - [Task Checklist](file:///C:/Users/faceb/.gemini/antigravity/brain/6453f044-86a9-43c1-933e-0ae7c76a2d0d/task.md)
 - [Walkthrough Document](file:///C:/Users/faceb/.gemini/antigravity/brain/6453f044-86a9-43c1-933e-0ae7c76a2d0d/walkthrough.md)
+
+---
+
+## 🌐 Deployment Information
+
+| รายการ | ค่า |
+|:--------|:----|
+| **Live URL** | https://aicontents.vip |
+| **WWW URL** | https://www.aicontents.vip |
+| **GitHub Repo** | https://github.com/13Basskung/aicontent |
+| **Hosting** | Cloudflare Pages |
+| **Project Name** | `aicontent` |
+| **Build Command** | `npm run build` |
+| **Build Output** | `dist` |
+| **Root Directory** | `frontend` |
+| **Production Branch** | `main` |
+
+### Auto Deploy Workflow:
+```
+1. แก้ไขโค้ดใน VS Code
+2. Commit changes (Ctrl+Shift+G → พิมพ์ message → ✓ Commit)
+3. Push to GitHub (Sync Changes หรือ git push)
+4. Cloudflare Pages จะ build และ deploy อัตโนมัติ (ประมาณ 1-2 นาที)
+```
