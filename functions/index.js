@@ -1060,6 +1060,12 @@ exports.consultantChat = functions.https.onCall(async (data, context) => {
   try {
     const openai = getOpenAI();
     const { message, history, currentModeData, aiMode = 'architect', expanderList = [] } = data;
+    
+    // DEBUG: Log received expanderList
+    console.log(`[consultantChat] aiMode: ${aiMode}, expanderList count: ${expanderList?.length || 0}`);
+    if (expanderList && expanderList.length > 0) {
+      console.log(`[consultantChat] Expander names: ${expanderList.map(e => e.name).join(', ')}`);
+    }
 
     // System prompt for Architect Mode (สร้างโครงเรื่อง)
     const architectSystemPrompt = `You are "AI Mode Architect" - ผู้ช่วยออกแบบโครงสร้าง Mode 🎬
