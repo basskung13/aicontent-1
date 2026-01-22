@@ -716,15 +716,17 @@ Type: ${dialogueRules.type}
 - CLIMAX scenes: more dialogue (3-5 lines)
 - RESOLUTION scenes: closing dialogue (1-2 lines)
 
-=== OUTPUT FORMAT (JSON Array) ===
-Return a JSON array with exactly ${scenes.length} objects:
-[
-  {
-    "sceneNumber": <number>,
-    "prompt": "<video prompt with SETTING, MAIN SUBJECT, SHOT LIST, DIALOGUE if applicable>",
-    "audioDescription": "<ambient sounds and music>"
-  }
-]
+=== OUTPUT FORMAT (JSON Object with scenes array) ===
+Return a JSON object with a "scenes" array containing exactly ${scenes.length} objects:
+{
+  "scenes": [
+    {
+      "sceneNumber": <number>,
+      "prompt": "<video prompt with SETTING, MAIN SUBJECT, SHOT LIST, DIALOGUE if applicable>",
+      "audioDescription": "<ambient sounds and music>"
+    }
+  ]
+}
 
 === PROMPT STRUCTURE (Each prompt must follow this) ===
 VIDEO SPEC: Duration ${sceneDuration}s | Style ${modeCategory} | Camera/Lighting from Expander
@@ -754,26 +756,56 @@ AVOID: No extra characters, no distortion, no blur, no glitch, no text
         response_format: { type: 'json_object' }
       });
 
-      let content = response.choices[0]?.message?.content?.trim() || '[]';
+      let content = response.choices[0]?.message?.content?.trim() || '{}';
       
-      // Parse JSON response
-      let parsed;
+      // Parse JSON response - handle various AI output formats
+      let parsed = [];
       try {
-        parsed = JSON.parse(content);
-        if (parsed.scenes) parsed = parsed.scenes;
-        if (parsed.prompts) parsed = parsed.prompts;
-        if (!Array.isArray(parsed)) parsed = [parsed];
+        const rawParsed = JSON.parse(content);
+        console.log(`      📄 Raw JSON keys: ${Object.keys(rawParsed).join(', ')}`);
+        
+        // Extract array from various possible structures
+        if (Array.isArray(rawParsed)) {
+          parsed = rawParsed;
+        } else if (rawParsed.scenes && Array.isArray(rawParsed.scenes)) {
+          parsed = rawParsed.scenes;
+        } else if (rawParsed.prompts && Array.isArray(rawParsed.prompts)) {
+          parsed = rawParsed.prompts;
+        } else if (rawParsed.data && Array.isArray(rawParsed.data)) {
+          parsed = rawParsed.data;
+        } else {
+          // Single object or unknown structure - wrap in array
+          parsed = [rawParsed];
+        }
+        
+        console.log(`      📄 Parsed ${parsed.length} scene objects`);
+        
+        // Debug: log first scene structure
+        if (parsed.length > 0) {
+          const firstScene = parsed[0];
+          console.log(`      📄 First scene keys: ${Object.keys(firstScene).join(', ')}`);
+          console.log(`      📄 First scene prompt length: ${(firstScene.prompt || '').length} chars`);
+        }
+        
       } catch (parseErr) {
         console.error(`   ❌ JSON parse error:`, parseErr.message);
+        console.error(`   ❌ Raw content (first 200 chars):`, content.substring(0, 200));
         parsed = [];
       }
 
-      // Map results to expanded prompts
+      // Map results to expanded prompts - use LOCAL index (0-based within batch)
       for (let idx = 0; idx < scenes.length; idx++) {
         const scene = scenes[idx];
         const globalIndex = startIndex + idx;
         const sceneNum = globalIndex + 1;
-        const expanded = parsed.find(p => p.sceneNumber === sceneNum) || parsed[idx] || {};
+        const localSceneNum = idx + 1; // 1-based within batch
+        
+        // Try multiple ways to find the matching scene data
+        const expanded = 
+          parsed.find(p => p.sceneNumber === sceneNum) ||  // Global match
+          parsed.find(p => p.sceneNumber === localSceneNum) ||  // Local match
+          parsed[idx] ||  // Direct index match
+          {};
 
         const position = globalIndex / (totalScenes - 1 || 1);
         let emotionalArc = 'RISING';
@@ -783,9 +815,15 @@ AVOID: No extra characters, no distortion, no blur, no glitch, no text
         else if (position <= 0.8) emotionalArc = 'FALLING';
         else emotionalArc = 'RESOLUTION';
 
+        // Debug: log what we found for this scene
+        const hasExpandedPrompt = !!(expanded.prompt && expanded.prompt.length > 50);
+        if (!hasExpandedPrompt) {
+          console.log(`      ⚠️ Scene ${sceneNum}: No expanded prompt found (expanded keys: ${Object.keys(expanded).join(', ')})`);
+        }
+
         allExpandedPrompts.push({
           sceneNumber: sceneNum,
-          englishPrompt: expanded.prompt || scene.visualPrompt || scene.rawPrompt || `Scene ${sceneNum}`,
+          englishPrompt: expanded.prompt || scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${sceneNum}`,
           originalPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle,
           audioDescription: expanded.audioDescription || scene.audioAmbience || 'Ambient sounds',
           cameraAngle: scene.cameraAngle || 'wide',
@@ -794,7 +832,9 @@ AVOID: No extra characters, no distortion, no blur, no glitch, no text
         });
       }
 
-      console.log(`   ✅ Batch ${batchIndex + 1} completed (${scenes.length} scenes)`);
+      // Log summary of what was expanded
+      const expandedCount = allExpandedPrompts.filter(p => p.englishPrompt && p.englishPrompt.length > 100).length;
+      console.log(`   ✅ Batch ${batchIndex + 1} completed: ${expandedCount}/${scenes.length} scenes with full prompts`);
 
     } catch (err) {
       // ============================================
