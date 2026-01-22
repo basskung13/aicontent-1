@@ -95,7 +95,12 @@ const ModeConsultant = ({ modeData, setModeData, expanderList = [] }) => {
                         : "")
             }));
 
-            console.log('[ModeConsultant] Sending to AI:', { message: userMessage, historyLength: history.length });
+            console.log('[ModeConsultant] Sending to AI:', { 
+                message: userMessage, 
+                historyLength: history.length,
+                expanderListCount: expanderList?.length || 0,
+                expanderNames: expanderList?.map(e => e.name) || []
+            });
             
             const response = await consultantChat({
                 message: userMessage,
