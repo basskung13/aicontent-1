@@ -1454,15 +1454,14 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                     <p className="text-xs text-orange-300 font-bold mb-2">⏳ Wait Actions <span className="text-gray-500 font-normal">(เพิ่ม step รอการทำงาน)</span></p>
                                     <div className="grid grid-cols-2 gap-2">
                                         <button onClick={() => {
-                                            const selector = prompt('ใส่ selector ของ Progress element:', 'div.sc-b546f8b9-4.hQLkNR');
-                                            if (selector) {
-                                                setRecordedSteps(prev => [...prev, {
-                                                    action: 'wait_for_progress_complete',
-                                                    selector: selector,
-                                                    timeout: 600000
-                                                }]);
-                                                setLogs(prev => [`[ADDED] wait_for_progress_complete: ${selector}`, ...prev]);
-                                            }
+                                            // ใช้ selector ของ Google Vids Progress element โดยตรง (ไม่ต้อง prompt)
+                                            const selector = '.sc-dd6abb21-1';
+                                            setRecordedSteps(prev => [...prev, {
+                                                action: 'wait_for_progress_complete',
+                                                selector: selector,
+                                                timeout: 600000
+                                            }]);
+                                            setLogs(prev => [`[ADDED] wait_for_progress_complete: ${selector}`, ...prev]);
                                         }}
                                             className="flex flex-col items-center p-2 bg-orange-500/10 border border-orange-500/30 rounded-lg hover:bg-orange-500/20 transition-all">
                                             <span className="text-orange-400 text-xs font-bold">📊 Wait Progress</span>

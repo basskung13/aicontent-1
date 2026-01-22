@@ -337,6 +337,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     return;
                 }
 
+                // 🔥 CRITICAL: Check if player is injected, if not - inject it
+                try {
+                    const [result] = await chrome.scripting.executeScript({
+                        target: { tabId: tabId },
+                        func: () => window.playerInjected === true
+                    });
+                    
+                    if (!result.result) {
+                        console.log("💉 Player not found, injecting...");
+                        // Get the actual player.js filename from manifest
+                        const manifest = chrome.runtime.getManifest();
+                        const playerFile = manifest.content_scripts[0].js.find(f => f.includes('player'));
+                        if (playerFile) {
+                            await chrome.scripting.executeScript({
+                                target: { tabId: tabId },
+                                files: [playerFile]
+                            });
+                            console.log("✅ Player script injected:", playerFile);
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                    } else {
+                        console.log("✅ Player already injected");
+                    }
+                } catch (e) {
+                    console.warn("⚠️ Script injection check failed:", e.message);
+                }
+
                 // Execute block steps with highlight
                 for (let i = 0; i < block.steps.length; i++) {
                     // Check if test was stopped
