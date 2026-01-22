@@ -56,23 +56,32 @@ class ContentAutoPostAgent:
         """Send heartbeat to Firestore every 30 seconds to show agent is online."""
         import threading
         
+        def send_heartbeat():
+            try:
+                self.db.collection('agent_status').document(self.project_id).set({
+                    'projectId': self.project_id,
+                    'userId': self.uid,
+                    'status': 'online',
+                    'lastSeen': firestore.SERVER_TIMESTAMP,
+                    'version': '2.1'
+                }, merge=True)
+                print(f"💓 Heartbeat sent to agent_status/{self.project_id}")
+                return True
+            except Exception as e:
+                print(f"⚠️ Heartbeat failed: {e}")
+                return False
+        
+        # Send first heartbeat immediately
+        send_heartbeat()
+        
         def heartbeat_loop():
             while True:
-                try:
-                    self.db.collection('agent_status').document(self.project_id).set({
-                        'projectId': self.project_id,
-                        'userId': self.uid,
-                        'status': 'online',
-                        'lastSeen': firestore.SERVER_TIMESTAMP,
-                        'version': '2.1'
-                    }, merge=True)
-                except Exception as e:
-                    print(f"⚠️ Heartbeat failed: {e}")
                 time.sleep(30)
+                send_heartbeat()
         
         heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         heartbeat_thread.start()
-        print("💓 Heartbeat started (every 30s)")
+        print("💓 Heartbeat thread started (every 30s)")
 
     def start_listener(self):
         """Listens for NEW jobs in the 'agent_jobs' collection assigned to this project."""

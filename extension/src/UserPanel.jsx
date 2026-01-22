@@ -242,9 +242,18 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
         return () => clearInterval(interval);
     }, [selectedProjectId]);
 
-    // Copy agent command to clipboard
+    // Launch Desktop Agent via URL protocol
+    const launchDesktopAgent = () => {
+        window.open('autopost://start', '_blank');
+        // Check status after 5 seconds
+        setTimeout(() => {
+            setAgentStatus('unknown');
+        }, 5000);
+    };
+
+    // Copy agent command to clipboard (fallback)
     const copyAgentCommand = () => {
-        const command = `cd legacy_desktop_agent && python main.py`;
+        const command = `cd /d C:\\content-auto-post\\legacy_desktop_agent && python main.py`;
         navigator.clipboard.writeText(command);
         setCommandCopied(true);
         setTimeout(() => setCommandCopied(false), 2000);
@@ -1206,29 +1215,13 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                             </div>
                                             {agentStatus !== 'online' && (
                                                 <button
-                                                    onClick={() => setShowAgentCommand(!showAgentCommand)}
-                                                    className="text-[10px] px-2 py-1 bg-orange-500/20 text-orange-400 rounded border border-orange-500/30 hover:bg-orange-500/30"
+                                                    onClick={launchDesktopAgent}
+                                                    className="text-[10px] px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/40 font-bold"
                                                 >
-                                                    {showAgentCommand ? 'ซ่อน' : 'วิธีเปิด'}
+                                                    🚀 เปิด
                                                 </button>
                                             )}
                                         </div>
-                                        {showAgentCommand && agentStatus !== 'online' && (
-                                            <div className="mt-2 p-2 bg-black/30 rounded text-[10px]">
-                                                <p className="text-gray-400 mb-1">รันคำสั่งนี้ใน Terminal:</p>
-                                                <div className="flex items-center gap-2">
-                                                    <code className="flex-1 text-yellow-400 font-mono bg-black/50 px-2 py-1 rounded">
-                                                        cd legacy_desktop_agent && python main.py
-                                                    </code>
-                                                    <button
-                                                        onClick={copyAgentCommand}
-                                                        className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30"
-                                                    >
-                                                        {commandCopied ? '✅' : '📋'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
 
@@ -1461,15 +1454,14 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                     <p className="text-xs text-orange-300 font-bold mb-2">⏳ Wait Actions <span className="text-gray-500 font-normal">(เพิ่ม step รอการทำงาน)</span></p>
                                     <div className="grid grid-cols-2 gap-2">
                                         <button onClick={() => {
-                                            const selector = prompt('ใส่ selector ของ Progress element:', 'div.sc-b546f8b9-4.hQLkNR');
-                                            if (selector) {
-                                                setRecordedSteps(prev => [...prev, {
-                                                    action: 'wait_for_progress_complete',
-                                                    selector: selector,
-                                                    timeout: 600000
-                                                }]);
-                                                setLogs(prev => [`[ADDED] wait_for_progress_complete: ${selector}`, ...prev]);
-                                            }
+                                            // ใช้ selector ของ Google Vids Progress element โดยตรง (ไม่ต้อง prompt)
+                                            const selector = '.sc-dd6abb21-1';
+                                            setRecordedSteps(prev => [...prev, {
+                                                action: 'wait_for_progress_complete',
+                                                selector: selector,
+                                                timeout: 600000
+                                            }]);
+                                            setLogs(prev => [`[ADDED] wait_for_progress_complete: ${selector}`, ...prev]);
                                         }}
                                             className="flex flex-col items-center p-2 bg-orange-500/10 border border-orange-500/30 rounded-lg hover:bg-orange-500/20 transition-all">
                                             <span className="text-orange-400 text-xs font-bold">📊 Wait Progress</span>

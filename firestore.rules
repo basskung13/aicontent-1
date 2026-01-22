@@ -147,6 +147,11 @@ service cloud.firestore {
       allow read, write: if true; // Allow Anonymous Agent
     }
 
+    // 🟢 EXTENSION: Agent Status (for Desktop Agent heartbeat)
+    match /agent_status/{projectId} {
+      allow read, write: if true; // Allow Extension to check agent status
+    }
+
     // 🟢 EXTENSION: Allow reading user projects for Agent (key-based auth bypass)
     match /{path=**}/projects/{projectId} {
       allow read: if true; // Allow reading projects from any user path

@@ -1,0 +1,102 @@
+{
+  "name": "สร้างวีดีโอหลายซีนต์พร้อมกัน",
+  "type": "ONCE",
+  "startUrl": "https://labs.google/fx/tools/flow",
+  "description": "สร้างวีดีโอหลายซีนพร้อมกันใน Google Flow แล้วรอดาวน์โหลด",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "button:has-text('New project')",
+      "value": "",
+      "delay": 2000,
+      "comment": "กดสร้างโปรเจกต์ใหม่"
+    },
+    {
+      "action": "wait",
+      "selector": "#PINHOLE_TEXT_AREA_ELEMENT_ID",
+      "value": "",
+      "delay": 3000,
+      "comment": "รอ text area โหลด"
+    },
+    {
+      "action": "loop_scenes",
+      "selector": "",
+      "value": "{{scenes}}",
+      "delay": 0,
+      "comment": "วนลูปใส่ prompt แต่ละซีน",
+      "loopSteps": [
+        {
+          "action": "click",
+          "selector": "#PINHOLE_TEXT_AREA_ELEMENT_ID",
+          "value": "",
+          "delay": 1000
+        },
+        {
+          "action": "type",
+          "selector": "#PINHOLE_TEXT_AREA_ELEMENT_ID",
+          "value": "{{scene.prompt}}",
+          "delay": 500
+        },
+        {
+          "action": "click",
+          "selector": ".sc-95c4f607-0",
+          "value": "",
+          "delay": 1000,
+          "comment": "กดปุ่ม + เพื่อเพิ่มซีนถัดไป"
+        },
+        {
+          "action": "wait",
+          "selector": "#PINHOLE_TEXT_AREA_ELEMENT_ID",
+          "value": "",
+          "delay": 2000,
+          "comment": "รอ text area พร้อม"
+        }
+      ]
+    },
+    {
+      "action": "click",
+      "selector": "button:has-text('Create')",
+      "value": "",
+      "delay": 2000,
+      "comment": "กดสร้างวีดีโอทั้งหมด"
+    },
+    {
+      "action": "wait_for_progress",
+      "selector": ".sc-dd6abb21-1",
+      "value": "100",
+      "delay": 300000,
+      "timeout": 600000,
+      "comment": "รอจน progress 100% (timeout 10 นาที)"
+    },
+    {
+      "action": "loop_download",
+      "selector": ".sc-dd6abb21-0",
+      "value": "",
+      "delay": 5000,
+      "comment": "วนลูปดาวน์โหลดวีดีโอแต่ละซีน",
+      "loopSteps": [
+        {
+          "action": "click",
+          "selector": "{{scene.videoElement}}",
+          "value": "",
+          "delay": 1000,
+          "comment": "คลิกที่วีดีโอ"
+        },
+        {
+          "action": "click",
+          "selector": "button:has-text('Download')",
+          "value": "",
+          "delay": 3000,
+          "comment": "กดดาวน์โหลด"
+        },
+        {
+          "action": "wait",
+          "selector": "",
+          "value": "",
+          "delay": 5000,
+          "comment": "รอดาวน์โหลดเสร็จ"
+        }
+      ]
+    }
+  ]
+}
