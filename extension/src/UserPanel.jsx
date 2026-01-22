@@ -1215,39 +1215,13 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                             </div>
                                             {agentStatus !== 'online' && (
                                                 <button
-                                                    onClick={() => setShowAgentCommand(!showAgentCommand)}
-                                                    className="text-[10px] px-2 py-1 bg-orange-500/20 text-orange-400 rounded border border-orange-500/30 hover:bg-orange-500/30"
+                                                    onClick={launchDesktopAgent}
+                                                    className="text-[10px] px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/40 font-bold"
                                                 >
-                                                    {showAgentCommand ? 'ซ่อน' : 'วิธีเปิด'}
+                                                    🚀 เปิด
                                                 </button>
                                             )}
                                         </div>
-                                        {showAgentCommand && agentStatus !== 'online' && (
-                                            <div className="mt-2 p-2 bg-black/30 rounded text-[10px]">
-                                                <button
-                                                    onClick={launchDesktopAgent}
-                                                    className="w-full mb-2 py-2 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/40 font-bold"
-                                                >
-                                                    🚀 เปิด Desktop Agent
-                                                </button>
-                                                <p className="text-gray-500 text-center text-[9px]">
-                                                    (ต้องรัน install_protocol.bat ก่อน 1 ครั้ง)
-                                                </p>
-                                                <hr className="border-white/10 my-2" />
-                                                <p className="text-gray-400 mb-1">หรือรันคำสั่งนี้เอง:</p>
-                                                <div className="flex items-center gap-2">
-                                                    <code className="flex-1 text-yellow-400 font-mono bg-black/50 px-2 py-1 rounded truncate">
-                                                        cd /d C:\content-auto-post\legacy_desktop_agent && python main.py
-                                                    </code>
-                                                    <button
-                                                        onClick={copyAgentCommand}
-                                                        className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30"
-                                                    >
-                                                        {commandCopied ? '✅' : '📋'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
 
