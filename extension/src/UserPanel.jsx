@@ -35,6 +35,12 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
     const [latestVersion, setLatestVersion] = useState(null);
     const [updateDismissed, setUpdateDismissed] = useState(false);
 
+    // Desktop Agent Status States
+    const [agentStatus, setAgentStatus] = useState('unknown'); // 'online' | 'offline' | 'unknown'
+    const [agentLastSeen, setAgentLastSeen] = useState(null);
+    const [showAgentCommand, setShowAgentCommand] = useState(false);
+    const [commandCopied, setCommandCopied] = useState(false);
+
     // Helper to get Auth Token
     const getAuthToken = async () => {
         try {
@@ -200,6 +206,49 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
         const interval = setInterval(fetchJobs, 30000);
         return () => clearInterval(interval);
     }, [selectedProjectId, userId]);
+
+    // Check Desktop Agent Status
+    useEffect(() => {
+        if (!selectedProjectId) return;
+
+        const checkAgentStatus = async () => {
+            try {
+                const token = await getAuthToken();
+                const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/agent_status/${selectedProjectId}?key=${API_KEY}`;
+                const res = await fetch(url, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+                const data = await res.json();
+                
+                if (data.fields && data.fields.lastSeen) {
+                    const lastSeen = new Date(data.fields.lastSeen.timestampValue);
+                    const now = new Date();
+                    const diffSeconds = (now - lastSeen) / 1000;
+                    
+                    setAgentLastSeen(lastSeen);
+                    // ถ้า lastSeen ภายใน 60 วินาที = online
+                    setAgentStatus(diffSeconds < 60 ? 'online' : 'offline');
+                } else {
+                    setAgentStatus('offline');
+                }
+            } catch (err) {
+                console.error('Error checking agent status:', err);
+                setAgentStatus('unknown');
+            }
+        };
+
+        checkAgentStatus();
+        const interval = setInterval(checkAgentStatus, 10000); // Check every 10s
+        return () => clearInterval(interval);
+    }, [selectedProjectId]);
+
+    // Copy agent command to clipboard
+    const copyAgentCommand = () => {
+        const command = `cd legacy_desktop_agent && python main.py`;
+        navigator.clipboard.writeText(command);
+        setCommandCopied(true);
+        setTimeout(() => setCommandCopied(false), 2000);
+    };
 
     const handleSelectProject = (projectId) => {
         const project = projects.find(p => p.id === projectId);
@@ -1137,6 +1186,52 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                             </div>
                         ) : (
                             <div className="space-y-2">
+                                {/* Desktop Agent Status Card */}
+                                {selectedProjectId && (
+                                    <div className={`p-3 rounded-lg border mb-3 ${
+                                        agentStatus === 'online' 
+                                            ? 'bg-green-500/10 border-green-500/30' 
+                                            : 'bg-orange-500/10 border-orange-500/30'
+                                    }`}>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-2 h-2 rounded-full ${
+                                                    agentStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-orange-500'
+                                                }`}></div>
+                                                <span className={`text-xs font-medium ${
+                                                    agentStatus === 'online' ? 'text-green-400' : 'text-orange-400'
+                                                }`}>
+                                                    🖥️ Desktop Agent: {agentStatus === 'online' ? 'ออนไลน์' : 'ออฟไลน์'}
+                                                </span>
+                                            </div>
+                                            {agentStatus !== 'online' && (
+                                                <button
+                                                    onClick={() => setShowAgentCommand(!showAgentCommand)}
+                                                    className="text-[10px] px-2 py-1 bg-orange-500/20 text-orange-400 rounded border border-orange-500/30 hover:bg-orange-500/30"
+                                                >
+                                                    {showAgentCommand ? 'ซ่อน' : 'วิธีเปิด'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {showAgentCommand && agentStatus !== 'online' && (
+                                            <div className="mt-2 p-2 bg-black/30 rounded text-[10px]">
+                                                <p className="text-gray-400 mb-1">รันคำสั่งนี้ใน Terminal:</p>
+                                                <div className="flex items-center gap-2">
+                                                    <code className="flex-1 text-yellow-400 font-mono bg-black/50 px-2 py-1 rounded">
+                                                        cd legacy_desktop_agent && python main.py
+                                                    </code>
+                                                    <button
+                                                        onClick={copyAgentCommand}
+                                                        className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30"
+                                                    >
+                                                        {commandCopied ? '✅' : '📋'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {projects.map(project => {
                                     const isRunning = project.status === 'running';
                                     const isSelected = selectedProjectId === project.id;
