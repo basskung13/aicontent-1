@@ -138,6 +138,19 @@ class ContentAutoPostAgent:
         if recipe_id == 'CMD_PLAY':
              self.execute_playback_session(job_id, job_data)
              return
+        
+        # --- SPECIAL COMMAND: STITCH VIDEO (FFmpeg) ---
+        if recipe_id == 'CMD_STITCH_VIDEO':
+            scene_files = job_data.get('sceneFiles', [])
+            output_path = job_data.get('outputPath', 'final.mp4')
+            success = self.stitch_videos(job_id, scene_files, output_path)
+            status = 'COMPLETED' if success else 'FAILED'
+            self.db.collection('agent_jobs').document(job_id).update({
+                'status': status,
+                'outputPath': output_path if success else None,
+                'endTime': firestore.SERVER_TIMESTAMP
+            })
+            return
         # -----------------------------------
         
         # 1. Fetch Recipe
@@ -401,6 +414,78 @@ class ContentAutoPostAgent:
         except Exception as e:
             print(f"❌ Session Error: {e}")
             self.log(f"Session Error: {e}", "error", "SESSION_MANAGER")
+    
+    def stitch_videos(self, job_id: str, scene_files: list, output_path: str) -> bool:
+        """Use FFmpeg to concatenate scene video files into a single video."""
+        import subprocess
+        
+        if not scene_files:
+            self.log("❌ No scene files provided for stitching", "error", "FFMPEG")
+            return False
+        
+        self.log(f"🎬 Starting video stitch: {len(scene_files)} scenes → {output_path}", "info", "FFMPEG")
+        print(f"🎬 [FFMPEG] Stitching {len(scene_files)} scene files...")
+        
+        try:
+            # 1. Validate all files exist
+            for sf in scene_files:
+                if not os.path.exists(sf):
+                    self.log(f"❌ Scene file not found: {sf}", "error", "FFMPEG")
+                    return False
+            
+            # 2. Create concat list file in same directory as first scene
+            list_file = os.path.join(os.path.dirname(scene_files[0]), 'concat_list.txt')
+            with open(list_file, 'w', encoding='utf-8') as f:
+                for sf in scene_files:
+                    # Use forward slashes for FFmpeg compatibility
+                    safe_path = sf.replace('\\', '/')
+                    f.write(f"file '{safe_path}'\n")
+            
+            print(f"📝 Created concat list: {list_file}")
+            
+            # 3. Run FFmpeg concat
+            cmd = [
+                'ffmpeg', '-y',           # Overwrite output
+                '-f', 'concat',           # Concatenation mode
+                '-safe', '0',             # Allow any file paths
+                '-i', list_file,          # Input list
+                '-c', 'copy',             # Copy streams without re-encoding (fast!)
+                output_path
+            ]
+            
+            print(f"🔧 Running: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                self.log(f"✅ Video stitched successfully: {output_path}", "success", "FFMPEG")
+                print(f"✅ [FFMPEG] Success! Output: {output_path}")
+                
+                # Cleanup temp concat list
+                try:
+                    os.remove(list_file)
+                except:
+                    pass
+                
+                return True
+            else:
+                error_msg = result.stderr[:500] if result.stderr else "Unknown error"
+                self.log(f"❌ FFmpeg Error: {error_msg}", "error", "FFMPEG")
+                print(f"❌ [FFMPEG] Error: {error_msg}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            self.log("❌ FFmpeg timed out (5 min limit)", "error", "FFMPEG")
+            print("❌ [FFMPEG] Timeout!")
+            return False
+        except FileNotFoundError:
+            self.log("❌ FFmpeg not installed! Please install FFmpeg.", "error", "FFMPEG")
+            print("❌ [FFMPEG] FFmpeg not found! Install with: winget install FFmpeg")
+            return False
+        except Exception as e:
+            self.log(f"❌ Stitch error: {str(e)}", "error", "FFMPEG")
+            print(f"❌ [FFMPEG] Exception: {e}")
+            return False
+
     def play_recipe(self, page, steps, variables):
         """Iterates through steps and executes them."""
         # Sort steps by order just in case

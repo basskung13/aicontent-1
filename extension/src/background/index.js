@@ -9,6 +9,39 @@ chrome.sidePanel
 const FIREBASE_PROJECT_ID = "content-auto-post";
 const API_KEY = "AIzaSyDGEnGxtkor9PwWkgjiQvrr9SmZ_IHKapE"; // Public Key for REST calls
 
+// --- SCENE TRACKING STATE ---
+let currentJobContext = {
+    jobId: null,
+    totalScenes: 0,
+    currentSceneIndex: -1,
+    sceneAssets: []   // [{ sceneIndex, filename, timestamp }]
+};
+
+// Initialize scene tracking before LOOP block
+const initSceneTracking = (jobId, totalScenes) => {
+    currentJobContext = {
+        jobId,
+        totalScenes,
+        currentSceneIndex: -1,
+        sceneAssets: []
+    };
+    console.log(`🎬 Scene Tracking Init: ${totalScenes} scenes for Job ${jobId}`);
+};
+
+// Set current scene index before each scene processing
+const setCurrentScene = (index) => {
+    currentJobContext.currentSceneIndex = index;
+    console.log(`🎬 Current Scene: ${index + 1}/${currentJobContext.totalScenes}`);
+};
+
+// Get ordered scene files for stitching
+const getOrderedSceneFiles = () => {
+    return currentJobContext.sceneAssets
+        .sort((a, b) => a.sceneIndex - b.sceneIndex)
+        .map(asset => asset.filename);
+};
+
+
 // --- HELPER: Firestore Value -> JS ---
 const fromFirestoreValue = (val) => {
     if (!val) return null;
@@ -26,6 +59,90 @@ const fromFirestoreValue = (val) => {
     if (val.timestampValue !== undefined) return val.timestampValue;
     if (val.nullValue !== undefined) return null;
     return val;
+};
+
+// --- HELPER: JS -> Firestore Value ---
+const toFirestoreValue = (val) => {
+    if (val === null || val === undefined) return { nullValue: null };
+    if (typeof val === 'string') return { stringValue: val };
+    if (typeof val === 'number') {
+        return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+    }
+    if (typeof val === 'boolean') return { booleanValue: val };
+    if (Array.isArray(val)) {
+        return { arrayValue: { values: val.map(toFirestoreValue) } };
+    }
+    if (typeof val === 'object') {
+        const fields = {};
+        for (const k in val) fields[k] = toFirestoreValue(val[k]);
+        return { mapValue: { fields } };
+    }
+    return { stringValue: String(val) };
+};
+
+// --- HELPER: Create Agent Job ---
+const createAgentJob = async (userId, projectId, recipeId, jobData = {}) => {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/agent_jobs?key=${API_KEY}`;
+
+    const fields = {
+        recipeId: { stringValue: recipeId },
+        projectId: { stringValue: projectId },
+        userId: { stringValue: userId },
+        status: { stringValue: 'PENDING' },
+        createdAt: { timestampValue: new Date().toISOString() }
+    };
+
+    // Add custom job data
+    for (const key in jobData) {
+        fields[key] = toFirestoreValue(jobData[key]);
+    }
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields })
+    });
+
+    const doc = await response.json();
+    const agentJobId = doc.name.split('/').pop();
+    console.log(`📝 Created Agent Job: ${agentJobId} (${recipeId})`);
+    return agentJobId;
+};
+
+// --- HELPER: Wait for Agent Job Completion ---
+const waitForAgentJob = async (agentJobId, timeout = 600000) => {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+        const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/agent_jobs/${agentJobId}?key=${API_KEY}`;
+        const response = await fetch(url);
+        const doc = await response.json();
+
+        if (!doc.fields) {
+            console.warn(`⚠️ Agent Job document empty: ${agentJobId}`);
+            await new Promise(r => setTimeout(r, 3000));
+            continue;
+        }
+
+        const status = doc.fields?.status?.stringValue;
+
+        if (status === 'COMPLETED') {
+            console.log(`✅ Agent Job Completed: ${agentJobId}`);
+            return { success: true, data: doc.fields };
+        }
+
+        if (status === 'FAILED') {
+            const error = doc.fields?.error?.stringValue || 'Unknown error';
+            console.error(`❌ Agent Job Failed: ${error}`);
+            return { success: false, error };
+        }
+
+        // Still running, poll again
+        await new Promise(r => setTimeout(r, 3000));
+    }
+
+    console.error(`⏱️ Agent Job Timeout: ${agentJobId}`);
+    return { success: false, error: 'Timeout waiting for Agent' };
 };
 
 // --- HELPER: Fetch Block from global_recipe_blocks (by name field, not document ID) ---
@@ -50,19 +167,19 @@ const fetchBlock = async (blockName) => {
                 }
             })
         });
-        
+
         const data = await res.json();
         console.log('📦 Block query result for', blockName, ':', data);
-        
+
         if (!data[0] || !data[0].document) {
             console.warn(`⚠️ Block not found: ${blockName}`);
             return null;
         }
-        
+
         const doc = data[0].document;
         const f = doc.fields;
         const docId = doc.name.split('/').pop();
-        
+
         return {
             id: docId,
             name: f.name?.stringValue || blockName,
@@ -156,13 +273,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     return;
                 }
                 console.log("📦 Block loaded:", block);
-                
+
                 // Smart Tab: Check existing tabs first, then use startUrl if needed
                 let tabId = request.tabId;
                 const targetUrl = block.startUrl?.trim();
-                
+
                 console.log("🔍 Block startUrl check:", { startUrl: targetUrl, hasUrl: !!targetUrl });
-                
+
                 if (targetUrl && targetUrl !== 'null') {
                     // Check if any existing tab matches the startUrl
                     const allTabs = await chrome.tabs.query({});
@@ -172,14 +289,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             return tab.url && new URL(tab.url).origin === targetOrigin;
                         } catch { return false; }
                     });
-                    
+
                     if (existingTab) {
                         console.log("✅ Found existing tab with same origin:", existingTab.url);
                         tabId = existingTab.id;
                         // Activate the existing tab and navigate to exact startUrl
                         await chrome.tabs.update(tabId, { active: true, url: targetUrl });
                         await chrome.windows.update(existingTab.windowId, { focused: true });
-                        
+
                         // Wait for navigation to complete
                         await new Promise(resolve => {
                             const listener = (updatedTabId, info) => {
@@ -196,7 +313,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         console.log("🌐 No existing tab found, opening new tab:", targetUrl);
                         const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
                         tabId = newTab.id;
-                        
+
                         // Wait for tab to fully load
                         await new Promise(resolve => {
                             const listener = (updatedTabId, info) => {
@@ -208,13 +325,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             chrome.tabs.onUpdated.addListener(listener);
                             setTimeout(resolve, 10000);
                         });
-                        
+
                         // Additional wait for page scripts
                         await new Promise(r => setTimeout(r, 2000));
                     }
                     console.log("✅ Tab ready:", tabId);
                 }
-                
+
                 if (!tabId) {
                     console.error("❌ No tabId available");
                     return;
@@ -233,7 +350,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     const step = block.steps[i];
                     const stepDelay = step.delay || 1000;
                     console.log(`▶️ Step ${i + 1}/${block.steps.length} (delay: ${stepDelay}ms):`, step);
-                    
+
                     // Send STEP_STARTED to UI
                     chrome.runtime.sendMessage({
                         action: "RECIPE_STATUS_UPDATE",
@@ -244,14 +361,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         stepAction: step.action,
                         stepSelector: step.selector || ''
                     });
-                    
+
                     // Wait before step using recorded delay (minimum 500ms)
                     if (i > 0) {
                         const waitTime = Math.max(stepDelay, 500);
                         console.log(`⏱️ Waiting ${waitTime}ms...`);
                         await new Promise(r => setTimeout(r, waitTime));
                     }
-                    
+
                     // Send step to content script with highlight
                     await chrome.tabs.sendMessage(tabId, {
                         action: "EXECUTE_STEP_WITH_HIGHLIGHT",
@@ -269,7 +386,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         totalSteps: block.steps.length
                     });
                 }
-                
+
                 // Send COMPLETED
                 chrome.runtime.sendMessage({
                     action: "RECIPE_STATUS_UPDATE",
@@ -289,12 +406,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         (async () => {
             try {
                 let tabId = request.tabId;
-                
+
                 // Get first block to check for startUrl
                 const firstBlock = await fetchBlock(request.blocks[0]);
                 const targetUrl = firstBlock?.startUrl?.trim();
                 console.log("🔍 First block startUrl check:", { startUrl: targetUrl, hasUrl: !!targetUrl });
-                
+
                 if (targetUrl && targetUrl !== 'null') {
                     // Check if any existing tab matches the startUrl
                     const allTabs = await chrome.tabs.query({});
@@ -304,14 +421,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             return tab.url && new URL(tab.url).origin === targetOrigin;
                         } catch { return false; }
                     });
-                    
+
                     if (existingTab) {
                         console.log("✅ Found existing tab with same origin:", existingTab.url);
                         tabId = existingTab.id;
                         // Activate the existing tab and navigate to exact startUrl
                         await chrome.tabs.update(tabId, { active: true, url: targetUrl });
                         await chrome.windows.update(existingTab.windowId, { focused: true });
-                        
+
                         // Wait for navigation to complete
                         await new Promise(resolve => {
                             const listener = (updatedTabId, info) => {
@@ -328,7 +445,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         console.log("🌐 No existing tab found, opening new tab:", targetUrl);
                         const newTab = await chrome.tabs.create({ url: targetUrl, active: true });
                         tabId = newTab.id;
-                        
+
                         // Wait for tab to fully load
                         await new Promise(resolve => {
                             const listener = (updatedTabId, info) => {
@@ -344,7 +461,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     }
                     console.log("✅ Tab ready:", tabId);
                 }
-                
+
                 if (!tabId) {
                     console.error("❌ No tabId available");
                     return;
@@ -353,7 +470,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 for (let blockIndex = 0; blockIndex < request.blocks.length; blockIndex++) {
                     const blockName = request.blocks[blockIndex];
                     console.log(`📦 Block ${blockIndex + 1}/${request.blocks.length}: ${blockName}`);
-                    
+
                     const block = await fetchBlock(blockName);
                     if (!block) {
                         console.warn(`⚠️ Block not found: ${blockName}, skipping...`);
@@ -365,14 +482,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         const step = block.steps[i];
                         const stepDelay = step.delay || 1000;
                         console.log(`▶️ Step ${i + 1}/${block.steps.length} (delay: ${stepDelay}ms):`, step);
-                        
+
                         // Wait before step using recorded delay (minimum 500ms)
                         if (i > 0) {
                             const waitTime = Math.max(stepDelay, 500);
                             console.log(`⏱️ Waiting ${waitTime}ms...`);
                             await new Promise(r => setTimeout(r, waitTime));
                         }
-                        
+
                         await chrome.tabs.sendMessage(tabId, {
                             action: "EXECUTE_STEP_WITH_HIGHLIGHT",
                             step: step,
@@ -420,13 +537,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// --- ASSET PIPELINE: DOWNLOAD INTERCEPTOR ---
+// --- ASSET PIPELINE: DOWNLOAD INTERCEPTOR (ENHANCED) ---
 chrome.downloads.onChanged.addListener((delta) => {
     if (delta.state && delta.state.current === "complete") {
         chrome.downloads.search({ id: delta.id }, (results) => {
             if (results && results[0]) {
                 const file = results[0];
                 console.log("📦 Asset Downloaded:", file.filename);
+
+                // Track Scene Asset with Index (for multi-scene workflows)
+                if (currentJobContext.currentSceneIndex >= 0) {
+                    currentJobContext.sceneAssets.push({
+                        sceneIndex: currentJobContext.currentSceneIndex,
+                        filename: file.filename,
+                        downloadId: file.id,
+                        timestamp: Date.now()
+                    });
+                    console.log(`📦 Scene ${currentJobContext.currentSceneIndex + 1}/${currentJobContext.totalScenes} tracked: ${file.filename}`);
+                }
+
+                // Keep latest_asset for backward compatibility
                 chrome.storage.local.set({
                     latest_asset: {
                         id: file.id,
@@ -436,9 +566,11 @@ chrome.downloads.onChanged.addListener((delta) => {
                         timestamp: Date.now()
                     }
                 });
+
                 chrome.runtime.sendMessage({
                     action: "ASSET_READY",
-                    payload: file
+                    payload: file,
+                    sceneIndex: currentJobContext.currentSceneIndex
                 }).catch(() => { });
             }
         });
@@ -654,11 +786,60 @@ const checkJobs = async (projectId) => {
                             variables: variables
                         };
 
+                        // Check if block requires Desktop Agent (e.g., STITCH_VIDEO)
+                        if (block.requiresAgent && block.agentCommand) {
+                            writeLog(`🤖 Delegating to Desktop Agent: ${block.agentCommand}`, "INFO");
+
+                            // Get ordered scene files from tracking
+                            const sceneFiles = getOrderedSceneFiles();
+
+                            if (sceneFiles.length === 0) {
+                                throw new Error("No scene files tracked for stitching");
+                            }
+
+                            writeLog(`📦 Scene files to stitch: ${sceneFiles.length}`, "INFO");
+
+                            // Create output path (Downloads folder)
+                            const outputPath = sceneFiles[0].replace(/[^\\\/]+$/, `final_${job.id}.mp4`);
+
+                            // Create agent job
+                            const userId = job.userId || 'unknown';
+                            const agentJobId = await createAgentJob(userId, job.projectId, block.agentCommand, {
+                                sceneFiles: sceneFiles,
+                                outputPath: outputPath,
+                                parentJobId: job.id
+                            });
+
+                            // Wait for agent to complete
+                            const result = await waitForAgentJob(agentJobId, 600000); // 10 min timeout
+
+                            if (result.success) {
+                                // Update latest_asset to point to stitched video
+                                chrome.storage.local.set({
+                                    latest_asset: {
+                                        filename: outputPath,
+                                        timestamp: Date.now(),
+                                        isStitched: true
+                                    }
+                                });
+                                videoFilePath = outputPath;
+                                writeLog(`✅ Video stitched: ${outputPath}`, "SUCCESS");
+                                blockSuccess = true;
+                            } else {
+                                throw new Error(`Agent failed: ${result.error}`);
+                            }
+                        }
                         // For LOOP blocks (like ADD_SCENE_TEXT), run per-scene
-                        if (block.type === 'LOOP' && job.prompts.length > 0) {
+                        else if (block.type === 'LOOP' && job.prompts.length > 0) {
+                            // Initialize scene tracking for this job
+                            initSceneTracking(job.id, job.prompts.length);
+
                             writeLog(`🔁 LOOP Block: Processing ${job.prompts.length} scenes...`, "INFO");
 
                             for (let s = 0; s < job.prompts.length; s++) {
+                                // Set current scene index for download tracking
+                                setCurrentScene(s);
+
                                 const scenePayload = {
                                     ...blockPayload,
                                     variables: { ...variables, prompt: job.prompts[s], sceneIndex: s }
@@ -688,6 +869,9 @@ const checkJobs = async (projectId) => {
 
                                 await new Promise(r => setTimeout(r, 3000)); // Delay between scenes
                             }
+
+                            // Log tracked scene assets
+                            writeLog(`📦 Tracked ${currentJobContext.sceneAssets.length} scene assets`, "INFO");
                         } else {
                             // ONCE blocks (Export, Download, Upload)
                             await new Promise((resolve, reject) => {
