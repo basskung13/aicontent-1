@@ -242,9 +242,18 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
         return () => clearInterval(interval);
     }, [selectedProjectId]);
 
-    // Copy agent command to clipboard
+    // Launch Desktop Agent via URL protocol
+    const launchDesktopAgent = () => {
+        window.open('autopost://start', '_blank');
+        // Check status after 5 seconds
+        setTimeout(() => {
+            setAgentStatus('unknown');
+        }, 5000);
+    };
+
+    // Copy agent command to clipboard (fallback)
     const copyAgentCommand = () => {
-        const command = `cd legacy_desktop_agent && python main.py`;
+        const command = `cd /d C:\\content-auto-post\\legacy_desktop_agent && python main.py`;
         navigator.clipboard.writeText(command);
         setCommandCopied(true);
         setTimeout(() => setCommandCopied(false), 2000);
@@ -1215,10 +1224,20 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                         </div>
                                         {showAgentCommand && agentStatus !== 'online' && (
                                             <div className="mt-2 p-2 bg-black/30 rounded text-[10px]">
-                                                <p className="text-gray-400 mb-1">รันคำสั่งนี้ใน Terminal:</p>
+                                                <button
+                                                    onClick={launchDesktopAgent}
+                                                    className="w-full mb-2 py-2 bg-green-500/20 text-green-400 rounded border border-green-500/30 hover:bg-green-500/40 font-bold"
+                                                >
+                                                    🚀 เปิด Desktop Agent
+                                                </button>
+                                                <p className="text-gray-500 text-center text-[9px]">
+                                                    (ต้องรัน install_protocol.bat ก่อน 1 ครั้ง)
+                                                </p>
+                                                <hr className="border-white/10 my-2" />
+                                                <p className="text-gray-400 mb-1">หรือรันคำสั่งนี้เอง:</p>
                                                 <div className="flex items-center gap-2">
-                                                    <code className="flex-1 text-yellow-400 font-mono bg-black/50 px-2 py-1 rounded">
-                                                        cd legacy_desktop_agent && python main.py
+                                                    <code className="flex-1 text-yellow-400 font-mono bg-black/50 px-2 py-1 rounded truncate">
+                                                        cd /d C:\content-auto-post\legacy_desktop_agent && python main.py
                                                     </code>
                                                     <button
                                                         onClick={copyAgentCommand}
