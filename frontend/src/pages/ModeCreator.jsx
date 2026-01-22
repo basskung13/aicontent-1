@@ -65,6 +65,9 @@ const ModeCreator = () => {
     const [isCharacterLibraryOpen, setIsCharacterLibraryOpen] = useState(false);
     const [libraryCharacters, setLibraryCharacters] = useState([]);
     const [loadingLibrary, setLoadingLibrary] = useState(false);
+    
+    // --- Expander List for AI Scene Writer ---
+    const [expanderList, setExpanderList] = useState([]);
     const [libSearchQuery, setLibSearchQuery] = useState('');
     const [libRoleFilter, setLibRoleFilter] = useState('all');
     const [libTagFilter, setLibTagFilter] = useState('');
@@ -221,18 +224,21 @@ const ModeCreator = () => {
                     setIsLoading(false); // Fix: Stop loading immediately
                 });
 
-                // B. Listen to default-mode (Legacy/Initial)
-                // Behavior Update: Only load default if we are in a "fresh" state and haven't selected anything?
-                // Actually, let's keep the legacy behavior for now but maybe we don't auto-load it into the Editor if we want "Pencil to Edit".
-                // Let's just listen but NOT setModeData automatically unless strictly needed.
-                // For now, removing the auto-loader for default-mode might be safer for strict "Pencil" logic.
-                // Or we can just set it as the "Active Editor" payload but NOT select a card.
+                // B. Listen to Expanders for AI Scene Writer
+                const expandersRef = collection(db, 'users', user.uid, 'expanders');
+                const unsubscribeExpanders = onSnapshot(expandersRef, (snapshot) => {
+                    const loadedExpanders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setExpanderList(loadedExpanders);
+                    console.log('[ModeCreator] Loaded expanders:', loadedExpanders.length);
+                });
 
                 return () => {
                     unsubscribeModes();
+                    unsubscribeExpanders();
                 };
             } else {
                 setIsLoading(false);
+                setExpanderList([]);
             }
         });
         return () => unsubscribeAuth();
@@ -1605,7 +1611,7 @@ ${sceneText}
             </div>
 
             {/* Mode Architect (Consultant) - ช่วยสร้างชื่อฉาก */}
-            <ModeConsultant modeData={modeData} setModeData={setModeData} />
+            <ModeConsultant modeData={modeData} setModeData={setModeData} expanderList={expanderList} />
 
             {/* Character Library Modal */}
             {isCharacterLibraryOpen && (
