@@ -367,9 +367,20 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
 
     // Template Builder States
     const [templateName, setTemplateName] = useState('');
+    const [templatePurpose, setTemplatePurpose] = useState(''); // Purpose: CREATE_VIDEO, UPLOAD_YOUTUBE, etc.
     const [templateBlocks, setTemplateBlocks] = useState([]); // Blocks in current template
     const [savedTemplates, setSavedTemplates] = useState([]);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
+    
+    // Purpose options for Template
+    const purposeOptions = [
+        { value: '', label: '-- เลือกหน้าที่ --' },
+        { value: 'CREATE_VIDEO', label: '🎬 สร้างวีดีโอ' },
+        { value: 'UPLOAD_YOUTUBE', label: '📺 อัพโหลด YouTube' },
+        { value: 'UPLOAD_FACEBOOK', label: '📘 อัพโหลด Facebook' },
+        { value: 'UPLOAD_TIKTOK', label: '🎵 อัพโหลด TikTok' },
+        { value: 'UPLOAD_INSTAGRAM', label: '📸 อัพโหลด Instagram' }
+    ];
 
     // Testing States
     const [isTestingBlock, setIsTestingBlock] = useState(false);
@@ -384,6 +395,16 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
     const [editedCodeText, setEditedCodeText] = useState('');
     const [codeCopied, setCodeCopied] = useState(false);
     const [isSavingCode, setIsSavingCode] = useState(false);
+    
+    // Template Editor States
+    const [isTemplateEditorOpen, setIsTemplateEditorOpen] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState(null);
+    const [editedTemplateData, setEditedTemplateData] = useState('');
+    
+    // Job Log Viewer States
+    const [isJobLogOpen, setIsJobLogOpen] = useState(false);
+    const [viewingJob, setViewingJob] = useState(null);
+    const [jobLogDetails, setJobLogDetails] = useState(null);
 
     // AI Assistant States
     const [isAIChatOpen, setIsAIChatOpen] = useState(false);
@@ -765,6 +786,7 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                 const templates = data.documents.map(doc => ({
                     id: doc.name.split('/').pop(),
                     name: doc.fields?.name?.stringValue || doc.name.split('/').pop(),
+                    purpose: doc.fields?.purpose?.stringValue || '',
                     blocks: doc.fields?.blocks?.arrayValue?.values?.map(v => v.stringValue) || []
                 }));
                 setSavedTemplates(templates);
@@ -1019,6 +1041,81 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
             setLogs(prev => [`[ERROR] ลบ Template ล้มเหลว: ${err.message}`, ...prev]);
         }
     };
+    
+    // Open Template Editor
+    const openTemplateEditor = (template) => {
+        setEditingTemplate(template);
+        setEditedTemplateData(JSON.stringify(template, null, 2));
+        setIsTemplateEditorOpen(true);
+    };
+    
+    // Save Template Edit
+    const saveTemplateEdit = async () => {
+        try {
+            const parsed = JSON.parse(editedTemplateData);
+            const token = await getAuthToken();
+            const toValue = (val) => {
+                if (Array.isArray(val)) return { arrayValue: { values: val.map(v => ({ stringValue: v })) } };
+                return { stringValue: String(val) };
+            };
+            
+            const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/recipe_templates/${editingTemplate.id}?key=${API_KEY}`;
+            const res = await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                body: JSON.stringify({
+                    fields: {
+                        name: toValue(parsed.name || ''),
+                        purpose: toValue(parsed.purpose || ''),
+                        blocks: toValue(parsed.blocks || [])
+                    }
+                })
+            });
+            
+            if (res.ok) {
+                alert('✅ บันทึก Template สำเร็จ!');
+                setIsTemplateEditorOpen(false);
+                fetchTemplates();
+            } else {
+                throw new Error(await res.text());
+            }
+        } catch (err) {
+            alert('❌ บันทึกล้มเหลว: ' + err.message);
+        }
+    };
+    
+    // Open Job Log Viewer
+    const openJobLog = async (job) => {
+        setViewingJob(job);
+        setIsJobLogOpen(true);
+        setJobLogDetails(null);
+        
+        try {
+            const token = await getAuthToken();
+            const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/agent_jobs/${job.id}?key=${API_KEY}`;
+            const res = await fetch(url, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            
+            if (data.fields) {
+                const details = {};
+                for (const key in data.fields) {
+                    const val = data.fields[key];
+                    if (val.stringValue !== undefined) details[key] = val.stringValue;
+                    else if (val.integerValue !== undefined) details[key] = Number(val.integerValue);
+                    else if (val.timestampValue !== undefined) details[key] = val.timestampValue;
+                    else if (val.arrayValue) details[key] = val.arrayValue.values?.map(v => v.stringValue || v.mapValue?.fields) || [];
+                    else if (val.mapValue) details[key] = val.mapValue.fields;
+                    else details[key] = val;
+                }
+                setJobLogDetails(details);
+            }
+        } catch (err) {
+            console.error('Error fetching job details:', err);
+            setJobLogDetails({ error: err.message });
+        }
+    };
 
     // Save Template to Firestore
     const saveTemplate = async () => {
@@ -1039,6 +1136,7 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                 body: JSON.stringify({
                     fields: {
                         name: toValue(templateName),
+                        purpose: toValue(templatePurpose || ''),
                         blocks: toValue(templateBlocks),
                         createdAt: { timestampValue: new Date().toISOString() }
                     }
@@ -1048,6 +1146,7 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
             if (res.ok) {
                 alert(`✅ Template "${templateName}" บันทึกสำเร็จ!`);
                 setTemplateName('');
+                setTemplatePurpose('');
                 setTemplateBlocks([]);
                 fetchTemplates();
             } else {
@@ -1300,9 +1399,18 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                                 <p className="text-white text-sm">{displayTime}</p>
                                                 <p className="text-gray-600 text-xs font-mono">{job.id.substring(0, 12)}...</p>
                                             </div>
-                                            <span className={`text-xs px-2 py-1 rounded border ${getStatusColor(job.status)}`}>
-                                                {job.status?.toUpperCase() || 'UNKNOWN'}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => openJobLog(job)}
+                                                    className="px-2 py-1 bg-blue-500/20 text-blue-400 text-[10px] rounded border border-blue-500/30 hover:bg-blue-500/30"
+                                                    title="ดู Log ละเอียด"
+                                                >
+                                                    🔍
+                                                </button>
+                                                <span className={`text-xs px-2 py-1 rounded border ${getStatusColor(job.status)}`}>
+                                                    {job.status?.toUpperCase() || 'UNKNOWN'}
+                                                </span>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -1644,6 +1752,20 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                     />
                                 </div>
 
+                                {/* Template Purpose */}
+                                <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                                    <label className="text-xs text-purple-400 font-bold block mb-2">🎯 หน้าที่ของ Template</label>
+                                    <select
+                                        value={templatePurpose}
+                                        onChange={(e) => setTemplatePurpose(e.target.value)}
+                                        className="w-full bg-black/50 border border-purple-500/30 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                                    >
+                                        {purposeOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
                                 {/* Current Template Blocks */}
                                 <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                                     <p className="text-xs text-green-400 font-bold mb-2">🔗 Block Sequence ({templateBlocks.length})</p>
@@ -1705,8 +1827,29 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                                             {savedTemplates.map(template => (
                                                 <div key={template.id} className="bg-black/30 rounded-lg p-2">
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <p className="text-white text-sm font-medium flex-1">{template.name}</p>
+                                                        <div className="flex-1">
+                                                            <p className="text-white text-sm font-medium">{template.name}</p>
+                                                            {template.purpose && (
+                                                                <span className={`inline-block text-[9px] px-2 py-0.5 rounded mt-1 ${
+                                                                    template.purpose === 'CREATE_VIDEO' ? 'bg-purple-500/30 text-purple-300' :
+                                                                    template.purpose === 'UPLOAD_YOUTUBE' ? 'bg-red-500/30 text-red-300' :
+                                                                    template.purpose === 'UPLOAD_FACEBOOK' ? 'bg-blue-500/30 text-blue-300' :
+                                                                    template.purpose === 'UPLOAD_TIKTOK' ? 'bg-pink-500/30 text-pink-300' :
+                                                                    template.purpose === 'UPLOAD_INSTAGRAM' ? 'bg-orange-500/30 text-orange-300' :
+                                                                    'bg-gray-500/30 text-gray-300'
+                                                                }`}>
+                                                                    {purposeOptions.find(o => o.value === template.purpose)?.label || template.purpose}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex gap-1">
+                                                            <button
+                                                                onClick={() => openTemplateEditor(template)}
+                                                                className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-[10px] rounded border border-yellow-500/30 hover:bg-yellow-500/30 font-bold"
+                                                                title="แก้ไข Template"
+                                                            >
+                                                                ✏️
+                                                            </button>
                                                             <button
                                                                 onClick={() => testTemplate(template.blocks)}
                                                                 className="px-2 py-1 bg-blue-500/20 text-blue-400 text-[10px] rounded border border-blue-500/30 hover:bg-blue-500/30 font-bold"
@@ -2023,6 +2166,87 @@ export default function UserPanel({ keyData, onLogout, onEnterAdminMode }) {
                             >
                                 ปิด
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Template Editor Modal */}
+            {isTemplateEditorOpen && editingTemplate && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-900 border border-white/20 rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                            <h3 className="text-white font-bold">✏️ แก้ไข Template: {editingTemplate.name}</h3>
+                            <button onClick={() => setIsTemplateEditorOpen(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+                        </div>
+                        <div className="p-4 flex-1 overflow-auto">
+                            <textarea
+                                value={editedTemplateData}
+                                onChange={(e) => setEditedTemplateData(e.target.value)}
+                                className="w-full h-64 bg-black/50 border border-white/10 rounded-lg p-3 text-green-400 font-mono text-xs focus:outline-none focus:border-green-500"
+                                spellCheck={false}
+                            />
+                            <p className="text-gray-500 text-xs mt-2">💡 แก้ไข JSON แล้วกดบันทึก (name, purpose, blocks)</p>
+                        </div>
+                        <div className="p-4 border-t border-white/10 flex gap-2">
+                            <button onClick={saveTemplateEdit} className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold text-sm">💾 บันทึก</button>
+                            <button onClick={() => setIsTemplateEditorOpen(false)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-bold text-sm">ปิด</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Job Log Viewer Modal */}
+            {isJobLogOpen && viewingJob && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-900 border border-white/20 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                            <h3 className="text-white font-bold">🔍 Job Log: {viewingJob.id?.substring(0, 15)}...</h3>
+                            <button onClick={() => setIsJobLogOpen(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+                        </div>
+                        <div className="p-4 flex-1 overflow-auto">
+                            {!jobLogDetails ? (
+                                <div className="text-center py-8">
+                                    <div className="animate-spin w-8 h-8 border-4 border-gray-600 border-t-white rounded-full mx-auto"></div>
+                                    <p className="text-gray-400 mt-2">กำลังโหลด...</p>
+                                </div>
+                            ) : jobLogDetails.error ? (
+                                <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4">
+                                    <p className="text-red-400">❌ Error: {jobLogDetails.error}</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {/* Status Badge */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 text-sm">Status:</span>
+                                        <span className={`px-3 py-1 rounded text-sm font-bold ${
+                                            jobLogDetails.status === 'COMPLETED' ? 'bg-green-500/30 text-green-400' :
+                                            jobLogDetails.status === 'FAILED' ? 'bg-red-500/30 text-red-400' :
+                                            jobLogDetails.status === 'RUNNING' ? 'bg-blue-500/30 text-blue-400' :
+                                            'bg-gray-500/30 text-gray-400'
+                                        }`}>{jobLogDetails.status || 'UNKNOWN'}</span>
+                                    </div>
+                                    
+                                    {/* Error Message */}
+                                    {jobLogDetails.error && (
+                                        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
+                                            <p className="text-red-400 text-sm font-bold mb-1">❌ Error:</p>
+                                            <p className="text-red-300 text-xs font-mono">{jobLogDetails.error}</p>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Full JSON */}
+                                    <div className="bg-black/50 border border-white/10 rounded-lg p-3">
+                                        <p className="text-gray-400 text-xs mb-2 font-bold">📋 Full Job Data:</p>
+                                        <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap overflow-auto max-h-96">
+                                            {JSON.stringify(jobLogDetails, null, 2)}
+                                        </pre>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-white/10">
+                            <button onClick={() => setIsJobLogOpen(false)} className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-bold text-sm">ปิด</button>
                         </div>
                     </div>
                 </div>
