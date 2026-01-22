@@ -554,7 +554,9 @@ const CATEGORY_DIALOGUE_RULES = {
 };
 
 // ============================================
-// SHARED HELPER: Expand Scenes with Topic (BATCH PROCESSING)
+// SHARED HELPER: Expand Scenes with Topic (STORY-FIRST APPROACH)
+// Step 1: Create Full Story with all dialogues
+// Step 2: Split into Scene Prompts
 // ============================================
 async function expandScenesWithTopic(params) {
   const {
@@ -569,15 +571,16 @@ async function expandScenesWithTopic(params) {
   } = params;
 
   const openai = getOpenAI();
-  const BATCH_SIZE = 5; // Process 5 scenes per API call
-  const allExpandedPrompts = [];
+  const totalScenes = rawScenes.length;
+  const totalDuration = totalScenes * sceneDuration;
 
   // ============================================
-  // DETAILED LOGGING - Debug Expander/Character
+  // DETAILED LOGGING
   // ============================================
-  console.log(`🔧 expandScenesWithTopic: Starting BATCH expansion`);
-  console.log(`   📊 Total Scenes: ${rawScenes.length}`);
-  console.log(`   📊 Batch Size: ${BATCH_SIZE}`);
+  console.log(`🔧 expandScenesWithTopic: STORY-FIRST APPROACH`);
+  console.log(`   📊 Total Scenes: ${totalScenes}`);
+  console.log(`   📊 Duration per Scene: ${sceneDuration}s`);
+  console.log(`   📊 Total Duration: ${totalDuration}s`);
   console.log(`   📊 Episode Topic: "${episodeTopic || 'No Episode'}"`);
   console.log(`   📊 Category: "${modeCategory || 'Cinematic / Movie'}"`);
   
@@ -585,7 +588,7 @@ async function expandScenesWithTopic(params) {
   console.log(`   📊 Expander Blocks: ${expanderBlocks?.length || 0}`);
   if (expanderBlocks && expanderBlocks.length > 0) {
     expanderBlocks.forEach((b, i) => {
-      console.log(`      ${i + 1}. "${b.name}" → ${(b.instruction || 'NO INSTRUCTION').substring(0, 50)}...`);
+      console.log(`      ${i + 1}. "${b.name}" → ${(b.instruction || 'NO INSTRUCTION').substring(0, 80)}...`);
     });
   }
   
@@ -593,7 +596,7 @@ async function expandScenesWithTopic(params) {
   console.log(`   📊 Characters: ${characters?.length || 0}`);
   if (characters && characters.length > 0) {
     characters.forEach((c, i) => {
-      console.log(`      ${i + 1}. "${c.name}" → ${(c.visualDescription || c.description || 'NO DESC').substring(0, 50)}...`);
+      console.log(`      ${i + 1}. "${c.name}" → ${(c.visualDescription || c.description || 'NO DESC').substring(0, 80)}...`);
     });
   }
 
@@ -616,8 +619,9 @@ async function expandScenesWithTopic(params) {
   if (expanderBlocks && expanderBlocks.length > 0) {
     for (const block of expanderBlocks) {
       const blockNameLower = (block.name || '').toLowerCase();
+      const blockInstruction = (block.instruction || '').toLowerCase();
       for (const [keyword, language] of Object.entries(languageKeywords)) {
-        if (blockNameLower.includes(keyword.toLowerCase())) {
+        if (blockNameLower.includes(keyword.toLowerCase()) || blockInstruction.includes(keyword.toLowerCase())) {
           detectedLanguage = language;
           console.log(`   🌐 Detected Language: "${block.name}" → ${language}`);
           break;
@@ -627,15 +631,27 @@ async function expandScenesWithTopic(params) {
   }
 
   // ============================================
-  // BUILD CONTEXT STRINGS
+  // BUILD CONTEXT STRINGS (Priority Order)
   // ============================================
   
-  // Expander Block Instructions
+  // 🔴 PRIORITY 1: Expander Block Instructions (HIGHEST)
   const expanderInstructions = expanderBlocks && expanderBlocks.length > 0
-    ? expanderBlocks.map((b, i) => `${i + 1}. ${b.name}: ${b.instruction || b.description || ''}`).join('\n')
+    ? expanderBlocks.map((b, i) => `${i + 1}. [${b.name}]: ${b.instruction || b.description || ''}`).join('\n')
     : 'Standard cinematic style';
 
-  // Character Context
+  // 🟠 PRIORITY 2: Mode Structure (Scene titles and emotional arc)
+  const modeStructure = rawScenes.map((scene, i) => {
+    const position = i / (totalScenes - 1 || 1);
+    let arc = 'RISING';
+    if (position <= 0.2) arc = 'INTRODUCTION';
+    else if (position <= 0.4) arc = 'RISING';
+    else if (position <= 0.6) arc = 'CLIMAX';
+    else if (position <= 0.8) arc = 'FALLING';
+    else arc = 'RESOLUTION';
+    return `Scene ${i + 1} (${arc}): ${scene.blockTitle || 'Untitled'} - ${scene.sceneInstruction || scene.visualPrompt || ''}`;
+  }).join('\n');
+
+  // 🟡 PRIORITY 3: Character Context
   const characterContext = characters && characters.length > 0
     ? characters.map(c => `- ${c.name}: ${c.visualDescription || c.description || 'N/A'}`).join('\n')
     : 'No specific characters defined';
@@ -644,234 +660,229 @@ async function expandScenesWithTopic(params) {
   const dialogueRules = CATEGORY_DIALOGUE_RULES[modeCategory] || CATEGORY_DIALOGUE_RULES["Cinematic / Movie"];
   console.log(`   📊 Dialogue Rules: ${dialogueRules.style} (${dialogueRules.dialoguePerScene})`);
 
-  // ============================================
-  // BATCH PROCESSING
-  // ============================================
-  const totalScenes = rawScenes.length;
-  const batches = [];
-  
-  for (let i = 0; i < totalScenes; i += BATCH_SIZE) {
-    batches.push({
-      batchIndex: Math.floor(i / BATCH_SIZE),
-      startIndex: i,
-      scenes: rawScenes.slice(i, i + BATCH_SIZE)
-    });
-  }
+  try {
+    // ============================================
+    // STEP 1: STORY CREATOR - สร้างเนื้อเรื่องทั้งหมดก่อน
+    // ============================================
+    console.log(`\n   📖 STEP 1: Creating Full Story...`);
 
-  console.log(`   📦 Created ${batches.length} batches`);
+    const storySystemPrompt = `You are a professional screenwriter. Create a complete story with connected dialogues.
 
-  // Process each batch
-  for (const batch of batches) {
-    const { batchIndex, startIndex, scenes } = batch;
-    console.log(`   📦 Processing Batch ${batchIndex + 1}/${batches.length} (Scenes ${startIndex + 1}-${startIndex + scenes.length})`);
-
-    try {
-      // Build scenes input for batch
-      const scenesInput = scenes.map((scene, idx) => {
-        const globalIndex = startIndex + idx;
-        const position = globalIndex / (totalScenes - 1 || 1);
-        let emotionalArc = 'RISING';
-        if (position <= 0.2) emotionalArc = 'INTRODUCTION';
-        else if (position <= 0.4) emotionalArc = 'RISING';
-        else if (position <= 0.6) emotionalArc = 'CLIMAX';
-        else if (position <= 0.8) emotionalArc = 'FALLING';
-        else emotionalArc = 'RESOLUTION';
-
-        return {
-          sceneNumber: globalIndex + 1,
-          title: scene.blockTitle || `Scene ${globalIndex + 1}`,
-          instruction: scene.sceneInstruction || scene.visualPrompt || scene.rawPrompt || '',
-          emotionalArc,
-          isFirst: globalIndex === 0,
-          isLast: globalIndex === totalScenes - 1
-        };
-      });
-
-      // ============================================
-      // NEW PROMPT TEMPLATE - Clear Structure
-      // ============================================
-      const systemPrompt = `You are an AI Video Prompt Generator. Generate prompts for AI video generation.
-
-=== VIDEO SPEC ===
-Duration: ${sceneDuration}s per scene
-Style: ${modeCategory || 'Cinematic'}
-Language: ${detectedLanguage}
-Rules: No text overlay, no watermark
-
-=== EXPANDER STYLE (MUST APPLY) ===
+=== 🔴 PRIORITY 1: EXPANDER RULES (MUST FOLLOW STRICTLY) ===
 ${expanderInstructions}
 
-=== EPISODE CONTEXT ===
-Topic: "${episodeTopic || 'Untitled'}"
-Description: ${episodeDesc || 'N/A'}
+⚠️ These Expander rules are MANDATORY. Every dialogue, every scene MUST follow these rules.
+If Expander says "ภาษาอีสาน" → ALL dialogues must be in Isan Thai dialect.
+If Expander says "horror style" → ALL scenes must have horror atmosphere.
 
-=== CHARACTERS ===
+=== 🟠 PRIORITY 2: MODE STRUCTURE (Scene breakdown) ===
+${modeStructure}
+
+=== 🟡 PRIORITY 3: CHARACTERS ===
 ${characterContext}
 
-=== DIALOGUE RULES (Based on Category: ${modeCategory}) ===
-Style: ${dialogueRules.style}
-Amount: ${dialogueRules.dialoguePerScene}
-Type: ${dialogueRules.type}
-- INTRODUCTION scenes: minimal dialogue (1-2 lines)
-- CLIMAX scenes: more dialogue (3-5 lines)
-- RESOLUTION scenes: closing dialogue (1-2 lines)
+=== 🟢 PRIORITY 4: EPISODE CONTEXT ===
+Topic: "${episodeTopic || 'Untitled'}"
+Description: ${episodeDesc || 'N/A'}
+Category: ${modeCategory || 'Cinematic'}
 
-=== OUTPUT FORMAT (JSON Object with scenes array) ===
-Return a JSON object with a "scenes" array containing exactly ${scenes.length} objects:
+=== DIALOGUE RULES (Category: ${modeCategory}) ===
+Style: ${dialogueRules.style}
+Amount per scene: ${dialogueRules.dialoguePerScene}
+Type: ${dialogueRules.type}
+
+=== VIDEO CONSTRAINTS ===
+Total Duration: ${totalDuration} seconds (${totalScenes} scenes × ${sceneDuration}s each)
+Language for ALL dialogues: ${detectedLanguage}
+
+=== YOUR TASK ===
+Write a COMPLETE STORY with:
+1. Full narrative arc (beginning → middle → end)
+2. ALL character dialogues that flow naturally and connect scene to scene
+3. Emotional progression matching the scene structure
+4. Every dialogue must be in ${detectedLanguage} and follow Expander rules
+
+=== OUTPUT FORMAT (JSON) ===
+{
+  "storyTitle": "Title of the story",
+  "storySynopsis": "Brief 2-3 sentence summary",
+  "fullDialogueScript": [
+    {
+      "sceneNumber": 1,
+      "emotionalArc": "INTRODUCTION",
+      "setting": "Location and atmosphere",
+      "dialogues": [
+        { "character": "Character Name", "line": "Dialogue in ${detectedLanguage}" }
+      ],
+      "visualAction": "What happens visually",
+      "audioMood": "Sound/music mood"
+    }
+  ]
+}`;
+
+    const storyResponse = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: storySystemPrompt },
+        { role: 'user', content: `Create a complete story for ${totalScenes} scenes about "${episodeTopic}". Make sure all dialogues connect naturally from scene to scene.` }
+      ],
+      temperature: 0.8,
+      max_tokens: 6000,
+      response_format: { type: 'json_object' }
+    });
+
+    let storyContent = storyResponse.choices[0]?.message?.content?.trim() || '{}';
+    let storyData;
+    
+    try {
+      storyData = JSON.parse(storyContent);
+      console.log(`   ✅ Story created: "${storyData.storyTitle || 'Untitled'}"`);
+      console.log(`   📄 Synopsis: ${(storyData.storySynopsis || '').substring(0, 100)}...`);
+      console.log(`   📄 Dialogue scenes: ${storyData.fullDialogueScript?.length || 0}`);
+    } catch (parseErr) {
+      console.error(`   ❌ Story parse error:`, parseErr.message);
+      storyData = { fullDialogueScript: [] };
+    }
+
+    // ============================================
+    // STEP 2: SCENE SPLITTER - แบ่งเป็น Video Prompts
+    // ============================================
+    console.log(`\n   🎬 STEP 2: Splitting into Scene Prompts...`);
+
+    const splitSystemPrompt = `You are a video prompt specialist. Convert story scenes into AI video generation prompts.
+
+=== STORY DATA ===
+Title: ${storyData.storyTitle || episodeTopic}
+Synopsis: ${storyData.storySynopsis || episodeDesc}
+
+=== 🔴 EXPANDER RULES (MUST APPLY TO EVERY PROMPT) ===
+${expanderInstructions}
+
+=== CHARACTERS (Use exact visualDescription) ===
+${characterContext}
+
+=== VIDEO SPEC ===
+Duration per scene: ${sceneDuration} seconds
+Style: ${modeCategory || 'Cinematic'}
+Language: ${detectedLanguage}
+
+=== YOUR TASK ===
+Convert each scene from the story into a video prompt.
+Each prompt must:
+1. Include SETTING (from story)
+2. Include MAIN SUBJECT (character with visualDescription)
+3. Include SHOT LIST (3-4 camera shots for ${sceneDuration}s)
+4. Include DIALOGUE (exactly from the story, in ${detectedLanguage})
+5. Follow ALL Expander rules
+
+=== OUTPUT FORMAT (JSON) ===
 {
   "scenes": [
     {
-      "sceneNumber": <number>,
-      "prompt": "<video prompt with SETTING, MAIN SUBJECT, SHOT LIST, DIALOGUE if applicable>",
-      "audioDescription": "<ambient sounds and music>"
+      "sceneNumber": 1,
+      "prompt": "VIDEO SPEC: Duration ${sceneDuration}s | Style ${modeCategory} | [Expander camera/lighting]\\nSETTING: [from story]\\nMAIN SUBJECT: [character + visualDescription]\\nSHOT LIST: 1. [shot] 2. [shot] 3. [shot]\\nDIALOGUE: [character]: \\"[line in ${detectedLanguage}]\\"\\nAVOID: No extra characters, no distortion",
+      "audioDescription": "Sound and music description"
     }
   ]
-}
+}`;
 
-=== PROMPT STRUCTURE (Each prompt must follow this) ===
-VIDEO SPEC: Duration ${sceneDuration}s | Style ${modeCategory} | Camera/Lighting from Expander
-SETTING: [Location based on Episode Topic, mood, atmosphere]
-MAIN SUBJECT: [Character name and visual description from Characters list]
-SHOT LIST: [3-4 specific camera shots]
-DIALOGUE: [If applicable based on Category rules, in ${detectedLanguage}]
-AVOID: No extra characters, no distortion, no blur, no glitch, no text
+    const dialogueScenes = storyData.fullDialogueScript || [];
+    const splitUserContent = `Convert these ${dialogueScenes.length} story scenes into video prompts:\n${JSON.stringify(dialogueScenes, null, 2)}`;
 
-=== IMPORTANT RULES ===
-1. SETTING must match Episode Topic "${episodeTopic}"
-2. Apply ALL Expander styles to every scene
-3. Use Character visualDescription exactly as provided
-4. Follow Dialogue Rules based on Category
-5. Output ONLY valid JSON, no markdown`;
+    const splitResponse = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: splitSystemPrompt },
+        { role: 'user', content: splitUserContent }
+      ],
+      temperature: 0.7,
+      max_tokens: 8000,
+      response_format: { type: 'json_object' }
+    });
 
-      const userContent = `Generate prompts for these ${scenes.length} scenes:\n${JSON.stringify(scenesInput, null, 2)}`;
+    let splitContent = splitResponse.choices[0]?.message?.content?.trim() || '{}';
+    let splitData;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-        response_format: { type: 'json_object' }
-      });
-
-      let content = response.choices[0]?.message?.content?.trim() || '{}';
-      
-      // Parse JSON response - handle various AI output formats
-      let parsed = [];
-      try {
-        const rawParsed = JSON.parse(content);
-        console.log(`      📄 Raw JSON keys: ${Object.keys(rawParsed).join(', ')}`);
-        
-        // Extract array from various possible structures
-        if (Array.isArray(rawParsed)) {
-          parsed = rawParsed;
-        } else if (rawParsed.scenes && Array.isArray(rawParsed.scenes)) {
-          parsed = rawParsed.scenes;
-        } else if (rawParsed.prompts && Array.isArray(rawParsed.prompts)) {
-          parsed = rawParsed.prompts;
-        } else if (rawParsed.data && Array.isArray(rawParsed.data)) {
-          parsed = rawParsed.data;
-        } else {
-          // Single object or unknown structure - wrap in array
-          parsed = [rawParsed];
-        }
-        
-        console.log(`      📄 Parsed ${parsed.length} scene objects`);
-        
-        // Debug: log first scene structure
-        if (parsed.length > 0) {
-          const firstScene = parsed[0];
-          console.log(`      📄 First scene keys: ${Object.keys(firstScene).join(', ')}`);
-          console.log(`      📄 First scene prompt length: ${(firstScene.prompt || '').length} chars`);
-        }
-        
-      } catch (parseErr) {
-        console.error(`   ❌ JSON parse error:`, parseErr.message);
-        console.error(`   ❌ Raw content (first 200 chars):`, content.substring(0, 200));
-        parsed = [];
-      }
-
-      // Map results to expanded prompts - use LOCAL index (0-based within batch)
-      for (let idx = 0; idx < scenes.length; idx++) {
-        const scene = scenes[idx];
-        const globalIndex = startIndex + idx;
-        const sceneNum = globalIndex + 1;
-        const localSceneNum = idx + 1; // 1-based within batch
-        
-        // Try multiple ways to find the matching scene data
-        const expanded = 
-          parsed.find(p => p.sceneNumber === sceneNum) ||  // Global match
-          parsed.find(p => p.sceneNumber === localSceneNum) ||  // Local match
-          parsed[idx] ||  // Direct index match
-          {};
-
-        const position = globalIndex / (totalScenes - 1 || 1);
-        let emotionalArc = 'RISING';
-        if (position <= 0.2) emotionalArc = 'INTRODUCTION';
-        else if (position <= 0.4) emotionalArc = 'RISING';
-        else if (position <= 0.6) emotionalArc = 'CLIMAX';
-        else if (position <= 0.8) emotionalArc = 'FALLING';
-        else emotionalArc = 'RESOLUTION';
-
-        // Debug: log what we found for this scene
-        const hasExpandedPrompt = !!(expanded.prompt && expanded.prompt.length > 50);
-        if (!hasExpandedPrompt) {
-          console.log(`      ⚠️ Scene ${sceneNum}: No expanded prompt found (expanded keys: ${Object.keys(expanded).join(', ')})`);
-        }
-
-        allExpandedPrompts.push({
-          sceneNumber: sceneNum,
-          englishPrompt: expanded.prompt || scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${sceneNum}`,
-          originalPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle,
-          audioDescription: expanded.audioDescription || scene.audioAmbience || 'Ambient sounds',
-          cameraAngle: scene.cameraAngle || 'wide',
-          blockTitle: scene.blockTitle || `Scene ${sceneNum}`,
-          emotionalArc
-        });
-      }
-
-      // Log summary of what was expanded
-      const expandedCount = allExpandedPrompts.filter(p => p.englishPrompt && p.englishPrompt.length > 100).length;
-      console.log(`   ✅ Batch ${batchIndex + 1} completed: ${expandedCount}/${scenes.length} scenes with full prompts`);
-
-    } catch (err) {
-      // ============================================
-      // ERROR HANDLING - Graceful Fallback
-      // ============================================
-      console.error(`   ❌ Batch ${batchIndex + 1} failed:`, err.message);
-      
-      // Fallback: use original prompts
-      for (let idx = 0; idx < scenes.length; idx++) {
-        const scene = scenes[idx];
-        const globalIndex = startIndex + idx;
-        const sceneNum = globalIndex + 1;
-
-        const position = globalIndex / (totalScenes - 1 || 1);
-        let emotionalArc = 'RISING';
-        if (position <= 0.2) emotionalArc = 'INTRODUCTION';
-        else if (position <= 0.4) emotionalArc = 'RISING';
-        else if (position <= 0.6) emotionalArc = 'CLIMAX';
-        else if (position <= 0.8) emotionalArc = 'FALLING';
-        else emotionalArc = 'RESOLUTION';
-
-        allExpandedPrompts.push({
-          sceneNumber: sceneNum,
-          englishPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${sceneNum}`,
-          originalPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle,
-          audioDescription: scene.audioAmbience || 'Ambient sounds',
-          cameraAngle: scene.cameraAngle || 'wide',
-          blockTitle: scene.blockTitle || `Scene ${sceneNum}`,
-          emotionalArc,
-          failed: true
-        });
-      }
+    try {
+      splitData = JSON.parse(splitContent);
+      console.log(`   ✅ Prompts generated: ${splitData.scenes?.length || 0} scenes`);
+    } catch (parseErr) {
+      console.error(`   ❌ Split parse error:`, parseErr.message);
+      splitData = { scenes: [] };
     }
-  }
 
-  console.log(`🏁 expandScenesWithTopic: Completed ${allExpandedPrompts.length} scenes (${batches.length} batches)`);
-  return allExpandedPrompts;
+    // ============================================
+    // MAP RESULTS TO OUTPUT FORMAT
+    // ============================================
+    const allExpandedPrompts = [];
+    const generatedScenes = splitData.scenes || [];
+
+    for (let i = 0; i < totalScenes; i++) {
+      const scene = rawScenes[i];
+      const generated = generatedScenes.find(s => s.sceneNumber === i + 1) || generatedScenes[i] || {};
+      
+      const position = i / (totalScenes - 1 || 1);
+      let emotionalArc = 'RISING';
+      if (position <= 0.2) emotionalArc = 'INTRODUCTION';
+      else if (position <= 0.4) emotionalArc = 'RISING';
+      else if (position <= 0.6) emotionalArc = 'CLIMAX';
+      else if (position <= 0.8) emotionalArc = 'FALLING';
+      else emotionalArc = 'RESOLUTION';
+
+      const hasPrompt = generated.prompt && generated.prompt.length > 50;
+      if (!hasPrompt) {
+        console.log(`   ⚠️ Scene ${i + 1}: No prompt generated, using fallback`);
+      }
+
+      allExpandedPrompts.push({
+        sceneNumber: i + 1,
+        englishPrompt: generated.prompt || scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${i + 1}`,
+        originalPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle,
+        audioDescription: generated.audioDescription || scene.audioAmbience || 'Ambient sounds',
+        cameraAngle: scene.cameraAngle || 'wide',
+        blockTitle: scene.blockTitle || `Scene ${i + 1}`,
+        emotionalArc,
+        storyConnected: hasPrompt
+      });
+    }
+
+    const successCount = allExpandedPrompts.filter(p => p.storyConnected).length;
+    console.log(`\n🏁 STORY-FIRST COMPLETE: ${successCount}/${totalScenes} scenes with connected story`);
+    
+    return allExpandedPrompts;
+
+  } catch (err) {
+    // ============================================
+    // ERROR HANDLING - Graceful Fallback
+    // ============================================
+    console.error(`   ❌ Story-First approach failed:`, err.message);
+    console.log(`   🔄 Falling back to basic prompts...`);
+    
+    const fallbackPrompts = [];
+    for (let i = 0; i < totalScenes; i++) {
+      const scene = rawScenes[i];
+      const position = i / (totalScenes - 1 || 1);
+      let emotionalArc = 'RISING';
+      if (position <= 0.2) emotionalArc = 'INTRODUCTION';
+      else if (position <= 0.4) emotionalArc = 'RISING';
+      else if (position <= 0.6) emotionalArc = 'CLIMAX';
+      else if (position <= 0.8) emotionalArc = 'FALLING';
+      else emotionalArc = 'RESOLUTION';
+
+      fallbackPrompts.push({
+        sceneNumber: i + 1,
+        englishPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle || `Scene ${i + 1}`,
+        originalPrompt: scene.visualPrompt || scene.rawPrompt || scene.blockTitle,
+        audioDescription: scene.audioAmbience || 'Ambient sounds',
+        cameraAngle: scene.cameraAngle || 'wide',
+        blockTitle: scene.blockTitle || `Scene ${i + 1}`,
+        emotionalArc,
+        failed: true
+      });
+    }
+    
+    return fallbackPrompts;
+  }
 }
 
 // ============================================
