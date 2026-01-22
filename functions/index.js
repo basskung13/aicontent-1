@@ -199,6 +199,20 @@ exports.seedDatabase = functions.https.onRequest(async (req, res) => {
       publishedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
+    // 6. Create STITCH_VIDEO Block in global_recipe_blocks
+    const stitchBlockRef = admin.firestore().collection('global_recipe_blocks').doc('STITCH_VIDEO');
+    batch.set(stitchBlockRef, {
+      name: 'STITCH_VIDEO',
+      type: 'ONCE',
+      category: 'processing',
+      description: 'รวมไฟล์ Scene เป็นวีดีโอเดียวด้วย FFmpeg',
+      icon: '🎬',
+      requiresAgent: true,
+      agentCommand: 'CMD_STITCH_VIDEO',
+      steps: [],
+      createdAt: new Date().toISOString().split('T')[0]
+    }, { merge: true });
+
     await batch.commit();
     res.json({ success: true, message: 'Database seeded successfully' });
   } catch (error) {
