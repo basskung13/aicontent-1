@@ -3,7 +3,7 @@ import { Brain, X, Send, Sparkles, Check, AlertTriangle, Paperclip } from 'lucid
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 
-const ModeConsultant = ({ modeData, setModeData }) => {
+const ModeConsultant = ({ modeData, setModeData, expanderList = [] }) => {
     const [isOpen, setIsOpen] = useState(false);
     // AI Mode: 'architect' (สร้างโครงเรื่อง) or 'instruction' (สร้างคำสั่งฉาก)
     const [aiMode, setAiMode] = useState('architect');
@@ -101,7 +101,8 @@ const ModeConsultant = ({ modeData, setModeData }) => {
                 message: userMessage,
                 history: history,
                 currentModeData: modeData,
-                aiMode: aiMode // Pass AI mode to backend
+                aiMode: aiMode, // Pass AI mode to backend
+                expanderList: expanderList // Pass expander list for AI Scene Writer
             });
 
             console.log('[ModeConsultant] AI Response:', response.data);
