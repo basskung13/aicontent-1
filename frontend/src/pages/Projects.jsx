@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, Folder, LayoutGrid, List, ArrowRight, Loader2, Play, Square, Layers, AlignLeft, Pencil, Check, X, Terminal, Clock, Activity, Filter, Youtube, Facebook, Video, ChevronDown, Trash2, Sparkles, Camera, Key, FlaskConical, Copy, CheckCircle, Hash, FileText } from 'lucide-react';
+import { Plus, Folder, LayoutGrid, List, ArrowRight, Loader2, Play, Square, Layers, AlignLeft, Pencil, Check, X, Terminal, Clock, Activity, Filter, Youtube, Facebook, Video, ChevronDown, Trash2, Sparkles, Camera, Key, FlaskConical, Copy, CheckCircle, Hash, FileText, Crown, AlertTriangle } from 'lucide-react';
 import { db, auth, functions, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
@@ -13,6 +13,7 @@ import GlassDropdown from '../components/ui/GlassDropdown';
 
 import ProjectHistory from '../components/Projects/ProjectHistory';
 import ContentQueue from '../components/Projects/ContentQueue';
+import useSubscription from '../hooks/useSubscription';
 
 export default function Projects() {
     const { t } = useTranslation();
@@ -20,6 +21,11 @@ export default function Projects() {
     const [projects, setProjects] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [activeTab, setActiveTab] = useState('monitor'); // 'monitor' | 'history'
+
+    // Subscription Hook
+    const { subscription, loading: loadingSub, getStatus, canCreate } = useSubscription(currentUser?.uid);
+    const subStatus = getStatus();
+    const projectLimit = canCreate('project', projects.length);
 
     // Creation State
     const [isCreating, setIsCreating] = useState(false);
@@ -226,6 +232,14 @@ export default function Projects() {
 
     const handleCreateProject = async () => {
         if (!newProjectName.trim() || !currentUser) return;
+        
+        // ตรวจสอบ subscription limit
+        const limitCheck = canCreate('project', projects.length);
+        if (!limitCheck.allowed) {
+            alert(`⚠️ ${limitCheck.reason}\n\nกรุณาอัพเกรด Subscription เพื่อสร้าง Project เพิ่มเติม`);
+            return;
+        }
+        
         setIsSaving(true);
         try {
             // Create a simple project doc
@@ -787,6 +801,26 @@ export default function Projects() {
                                 <LayoutGrid size={20} className="text-white" />
                             </div>
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-red-200">Your Projects</span>
+                            {/* Subscription Status Badge */}
+                            <div className="flex items-center gap-2 ml-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
+                                    subStatus.tier === 'Premium' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                                    subStatus.tier === 'VIP' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                                    'bg-slate-500/20 text-slate-300 border border-slate-500/30'
+                                }`}>
+                                    <Crown size={12} /> {subStatus.tier}
+                                </span>
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                    projectLimit.allowed ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                                }`}>
+                                    {projects.length}/{subStatus.limits.projects} Projects
+                                </span>
+                                {subStatus.isBlocked && (
+                                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/30 flex items-center gap-1">
+                                        <AlertTriangle size={12} /> Blocked
+                                    </span>
+                                )}
+                            </div>
                         </h2>
                         <div className="flex items-center gap-3">
                             {/* Extension Key Button */}

@@ -3,13 +3,14 @@ import {
     Sparkles, Save, TestTube, Upload, Trash2, GripVertical,
     Send, Bot, Loader2, ChevronDown, ChevronUp, Copy, Check,
     MessageCircle, X, Paperclip, Store, Coins, Package, Eye, Edit3, Camera, Image,
-    Plus, FolderPlus, MoveRight, ArrowUp, ArrowDown, Volume2, MoreVertical, Play, ExternalLink
+    Plus, FolderPlus, MoveRight, ArrowUp, ArrowDown, Volume2, MoreVertical, Play, ExternalLink, Crown, AlertTriangle
 } from 'lucide-react';
 import GlassDropdown from '../components/ui/GlassDropdown';
 import { auth, db, functions, storage } from '../firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, setDoc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, setDoc, query, where, serverTimestamp, onSnapshot, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
+import useSubscription from '../hooks/useSubscription';
 
 // === DEFAULT GROUPS (Blocks สามารถลบ/ย้าย/ฟังเสียงได้) ===
 const DEFAULT_GROUPS = [
@@ -115,6 +116,10 @@ const CATEGORIES = [
 const ExpanderCreator = () => {
     const [user, setUser] = useState(null);
     const messagesEndRef = useRef(null);
+    
+    // Subscription Hook
+    const { subscription, loading: loadingSub, getStatus, canCreate } = useSubscription(user?.uid);
+    const subStatus = getStatus();
     
     // Expander State
     const [expanderName, setExpanderName] = useState('');
@@ -861,6 +866,14 @@ const ExpanderCreator = () => {
                 }
                 await updateDoc(doc(db, 'users', user.uid, 'expanders', editingExpander.id), expanderData);
             } else {
+                // ตรวจสอบ subscription limit ก่อนสร้าง Expander ใหม่
+                const limitCheck = canCreate('extender', savedExpanders.length);
+                if (!limitCheck.allowed) {
+                    alert(`⚠️ ${limitCheck.reason}\n\nกรุณาอัพเกรด Subscription เพื่อสร้าง Expander เพิ่มเติม`);
+                    setSaving(false);
+                    return;
+                }
+                
                 // Create new expander first to get ID
                 docRef = await addDoc(collection(db, 'users', user.uid, 'expanders'), expanderData);
                 

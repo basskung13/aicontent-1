@@ -348,22 +348,31 @@ const LandingPage = () => {
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
               <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                Simple Pricing
+                แพ็คเกจราคา
               </span>
             </h2>
-            <p className="text-xl text-gray-300">Start free, upgrade when you need more</p>
+            <p className="text-xl text-gray-300">เริ่มต้นทดลองใช้ฟรี 7 วัน จากนั้นเลือกแพลนที่เหมาะกับคุณ</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Free Plan */}
+            {/* Free Trial */}
             <div className="p-8 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 hover:border-white/20 transition-all">
-              <h3 className="text-2xl font-bold mb-2">Free</h3>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">🎁</span>
+                <h3 className="text-2xl font-bold">ทดลองใช้ฟรี</h3>
+              </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold">$0</span>
-                <span className="text-gray-400">/month</span>
+                <span className="text-4xl font-bold">฿0</span>
+                <span className="text-gray-400"> / 7 วัน</span>
               </div>
               <ul className="space-y-3 mb-8">
-                {["3 Projects", "10 Videos/month", "Basic AI Features", "Community Support"].map((item, i) => (
+                {[
+                  "1 Project",
+                  "1 Mode",
+                  "1 Expander",
+                  "ทดสอบฟีเจอร์ทั้งหมด",
+                  "ไม่ต้องผูกบัตร"
+                ].map((item, i) => (
                   <li key={i} className="flex items-center gap-2 text-gray-300">
                     <Check className="w-5 h-5 text-green-400" />
                     {item}
@@ -374,22 +383,32 @@ const LandingPage = () => {
                 onClick={() => setShowLoginModal(true)}
                 className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-semibold"
               >
-                Get Started
+                เริ่มทดลองใช้ฟรี
               </button>
             </div>
 
-            {/* Pro Plan */}
-            <div className="relative p-8 bg-gradient-to-br from-red-500/20 to-purple-500/20 backdrop-blur-md rounded-2xl border-2 border-red-500/50 hover:border-red-400 transition-all transform scale-105">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-red-500 to-red-600 rounded-full text-sm font-bold">
-                POPULAR
+            {/* Pro Plan - VIP */}
+            <div className="relative p-8 bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-md rounded-2xl border-2 border-purple-500/50 hover:border-purple-400 transition-all transform scale-105">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full text-sm font-bold flex items-center gap-1">
+                👑 แนะนำ
               </div>
-              <h3 className="text-2xl font-bold mb-2">Pro</h3>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">💎</span>
+                <h3 className="text-2xl font-bold">Pro (VIP)</h3>
+              </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold">$29</span>
-                <span className="text-gray-400">/month</span>
+                <span className="text-4xl font-bold">฿199</span>
+                <span className="text-gray-400"> / เดือน</span>
               </div>
               <ul className="space-y-3 mb-8">
-                {["Unlimited Projects", "100 Videos/month", "Advanced AI Features", "Priority Support", "Custom Branding"].map((item, i) => (
+                {[
+                  "1 Project",
+                  "2 Modes",
+                  "2 Expanders",
+                  "AI Video Generation",
+                  "Auto Post ทุกแพลตฟอร์ม",
+                  "ซัพพอร์ตตลอด 24 ชม."
+                ].map((item, i) => (
                   <li key={i} className="flex items-center gap-2 text-gray-300">
                     <Check className="w-5 h-5 text-green-400" />
                     {item}
@@ -398,29 +417,56 @@ const LandingPage = () => {
               </ul>
               <button 
                 onClick={() => setShowLoginModal(true)}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-all font-semibold"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 transition-all font-semibold"
               >
-                Start Free Trial
+                สมัครสมาชิก
               </button>
             </div>
 
-            {/* Enterprise Plan */}
-            <div className="p-8 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 hover:border-white/20 transition-all">
-              <h3 className="text-2xl font-bold mb-2">Enterprise</h3>
-              <div className="mb-6">
-                <span className="text-4xl font-bold">Custom</span>
+            {/* Premium Plan */}
+            <div className="p-8 bg-gradient-to-br from-amber-500/10 to-orange-500/10 backdrop-blur-md rounded-2xl border border-amber-500/30 hover:border-amber-400/50 transition-all">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">⭐</span>
+                <h3 className="text-2xl font-bold">Premium</h3>
               </div>
+              <div className="mb-2">
+                <span className="text-4xl font-bold">฿199</span>
+                <span className="text-gray-400"> + </span>
+                <span className="text-2xl font-bold text-amber-400">฿250</span>
+                <span className="text-gray-400">/Project</span>
+              </div>
+              <p className="text-xs text-amber-300 mb-4">เพิ่ม Project ได้ไม่จำกัด!</p>
               <ul className="space-y-3 mb-8">
-                {["Unlimited Everything", "Dedicated Account Manager", "Custom AI Training", "SLA & 24/7 Support", "API Access"].map((item, i) => (
+                {[
+                  "ไม่จำกัด Projects",
+                  "+2 Modes ต่อ Project",
+                  "+2 Expanders ต่อ Project",
+                  "AI Video Generation",
+                  "Auto Post ทุกแพลตฟอร์ม",
+                  "Priority Support"
+                ].map((item, i) => (
                   <li key={i} className="flex items-center gap-2 text-gray-300">
-                    <Check className="w-5 h-5 text-green-400" />
+                    <Check className="w-5 h-5 text-amber-400" />
                     {item}
                   </li>
                 ))}
               </ul>
-              <button className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-semibold">
-                Contact Sales
+              <button 
+                onClick={() => setShowLoginModal(true)}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 transition-all font-semibold"
+              >
+                อัพเกรดเป็น Premium
               </button>
+            </div>
+          </div>
+
+          {/* Prorate Info */}
+          <div className="mt-12 text-center">
+            <div className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+              <span className="text-blue-400">💡</span>
+              <p className="text-sm text-blue-300">
+                สมัครระหว่างเดือน? จ่ายเฉพาะวันที่เหลือ (Prorate) - ไม่ต้องจ่ายเต็มเดือน!
+              </p>
             </div>
           </div>
         </div>

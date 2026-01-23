@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Save, Play, Layers, Box, Type, Plus, Trash2, Pencil, Film, Mic, Camera, ChevronDown, ChevronUp, GripVertical, Loader2, ChevronsDownUp, Sparkles, ChevronLeft, ChevronRight, RotateCcw, RotateCw, Pause, Copy, Check, Eye, Search } from 'lucide-react';
+import { Settings, Save, Play, Layers, Box, Type, Plus, Trash2, Pencil, Film, Mic, Camera, ChevronDown, ChevronUp, GripVertical, Loader2, ChevronsDownUp, Sparkles, ChevronLeft, ChevronRight, RotateCcw, RotateCw, Pause, Copy, Check, Eye, Search, Crown, AlertTriangle } from 'lucide-react';
 import CinematicStep from '../components/CinematicStep';
 import ModeConsultant from '../components/ModeConsultant';
 import GlassDropdown from '../components/ui/GlassDropdown';
 import { db, auth, storage, functions } from '../firebase';
-import { doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, orderBy, onSnapshot, serverTimestamp, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
 import { onAuthStateChanged } from 'firebase/auth';
+import useSubscription from '../hooks/useSubscription';
 
 const ModeCreator = () => {
     // A. The Data Structure (State)
@@ -53,6 +54,11 @@ const ModeCreator = () => {
     const isRemoteUpdate = useRef(false);
 
     const [allModes, setAllModes] = useState([]);
+    
+    // Subscription Hook
+    const { subscription, loading: loadingSub, getStatus, canCreate } = useSubscription(currentUser?.uid);
+    const subStatus = getStatus();
+    const modeLimit = canCreate('mode', allModes.length);
     const [selectedLibraryId, setSelectedLibraryId] = useState(null); // Visual selection only
     const [isEditorActive, setIsEditorActive] = useState(true); // Helper to disable form
     const [activeTab, setActiveTab] = useState('library'); // 'library' or 'editor'
@@ -694,6 +700,14 @@ const ModeCreator = () => {
                 await setDoc(doc(modesCollectionRef, docId), dataToSave, { merge: true });
                 console.log("Mode updated:", docId);
             } else {
+                // ตรวจสอบ subscription limit ก่อนสร้าง Mode ใหม่
+                const limitCheck = canCreate('mode', allModes.length);
+                if (!limitCheck.allowed) {
+                    alert(`⚠️ ${limitCheck.reason}\n\nกรุณาอัพเกรด Subscription เพื่อสร้าง Mode เพิ่มเติม`);
+                    setIsSaving(false);
+                    return;
+                }
+                
                 dataToSave.createdAt = serverTimestamp();
                 const newDocRef = await addDoc(modesCollectionRef, dataToSave);
                 docId = newDocRef.id;

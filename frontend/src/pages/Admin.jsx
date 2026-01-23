@@ -3,13 +3,14 @@ import { db, auth, functions } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, setDoc, increment, getDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { onAuthStateChanged } from 'firebase/auth';
-import { CheckCircle, XCircle, ExternalLink, Clock, Loader2, TrendingUp, TrendingDown, Users, Wallet, CreditCard, ArrowUpRight, ArrowDownRight, Edit3, DollarSign, BarChart3, Building2, Database, Trash2, RefreshCw, HardDrive } from 'lucide-react';
+import { CheckCircle, XCircle, ExternalLink, Clock, Loader2, TrendingUp, TrendingDown, Users, Wallet, CreditCard, ArrowUpRight, ArrowDownRight, Edit3, DollarSign, BarChart3, Building2, Database, Trash2, RefreshCw, HardDrive, Crown, Star } from 'lucide-react';
 import GlassDropdown from '../components/ui/GlassDropdown';
+import { createApprovedSubscription, formatPrice, formatThaiDate, SUBSCRIPTION_TIERS } from '../utils/subscriptionUtils';
 
 const Admin = () => {
     const [currentUser, setCurrentUser] = useState(null);
     const [activeTab, setActiveTab] = useState('dashboard');
-    const [creditSubTab, setCreditSubTab] = useState('deposits'); // deposits, withdrawals, manager
+    const [creditSubTab, setCreditSubTab] = useState('deposits'); // deposits, withdrawals, subscriptions, manager
 
     // Payments
     const [paymentRequests, setPaymentRequests] = useState([]);
@@ -22,6 +23,11 @@ const Admin = () => {
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [processingPaymentId, setProcessingPaymentId] = useState(null);
     const [processingWithdrawalId, setProcessingWithdrawalId] = useState(null);
+
+    // Subscription Payments
+    const [subscriptionPayments, setSubscriptionPayments] = useState([]);
+    const [loadingSubPayments, setLoadingSubPayments] = useState(false);
+    const [processingSubPaymentId, setProcessingSubPaymentId] = useState(null);
 
     // Credit Manager
     const [selectedUser, setSelectedUser] = useState(null);
@@ -94,6 +100,19 @@ const Admin = () => {
             setWithdrawalRequests(data);
             setLoadingWithdrawals(false);
         }, () => setLoadingWithdrawals(false));
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    // Fetch Subscription Payments
+    useEffect(() => {
+        if (!currentUser) return undefined;
+        setLoadingSubPayments(true);
+        const q = query(collection(db, 'subscription_payments'), orderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setSubscriptionPayments(data);
+            setLoadingSubPayments(false);
+        }, () => setLoadingSubPayments(false));
         return () => unsubscribe();
     }, [currentUser]);
 
@@ -370,6 +389,112 @@ const Admin = () => {
         }
     };
 
+    // Subscription Payment Handlers
+    const handleApproveSubscription = async (payment) => {
+        if (!currentUser) return;
+        const tierText = payment.extraProjects > 0 ? `Premium (${payment.totalProjects} Projects)` : 'VIP (Pro Plan)';
+        if (!confirm(`ยืนยันอนุมัติ Subscription ${tierText}\nยอด ${formatPrice(payment.amount)} ให้ ${payment.userEmail}?`)) return;
+        setProcessingSubPaymentId(payment.id);
+
+        try {
+            const currentDoc = await getDoc(doc(db, 'subscription_payments', payment.id));
+            if (currentDoc.data()?.status !== 'pending') {
+                alert('⚠️ รายการนี้ถูกดำเนินการไปแล้ว');
+                setProcessingSubPaymentId(null);
+                return;
+            }
+
+            // อัปเดต subscription_payments
+            await updateDoc(doc(db, 'subscription_payments', payment.id), {
+                status: 'approved',
+                reviewedAt: serverTimestamp(),
+                reviewedById: currentUser.uid,
+                reviewedByEmail: currentUser.email || ''
+            });
+
+            // ดึง subscription ปัจจุบัน
+            const subRef = doc(db, 'users', payment.userId, 'subscription', 'main');
+            const subDoc = await getDoc(subRef);
+            const currentSub = subDoc.exists() ? subDoc.data() : null;
+
+            // สร้าง subscription ใหม่
+            const newSub = createApprovedSubscription(currentSub, payment.extraProjects || 0);
+            await setDoc(subRef, {
+                ...newSub,
+                updatedAt: serverTimestamp(),
+                lastPaymentAt: serverTimestamp(),
+                lastPaymentId: payment.id,
+            }, { merge: true });
+
+            // บันทึก log
+            await addDoc(collection(db, 'payment_logs'), {
+                type: 'subscription',
+                requestId: payment.id,
+                userId: payment.userId,
+                userEmail: payment.userEmail || '',
+                amount: payment.amount,
+                slipUrl: payment.slipUrl || '',
+                tier: payment.tier,
+                extraProjects: payment.extraProjects || 0,
+                totalProjects: payment.totalProjects || 1,
+                limits: payment.limits,
+                status: 'approved',
+                reviewedById: currentUser.uid,
+                reviewedByEmail: currentUser.email || '',
+                createdAt: serverTimestamp()
+            });
+
+            alert(`✅ อนุมัติ Subscription สำเร็จ\nTier: ${payment.tier}\nLimits: ${payment.limits?.projects} Projects, ${payment.limits?.modes} Modes, ${payment.limits?.extenders} Extenders`);
+        } catch (error) {
+            console.error('Approve subscription failed:', error);
+            alert('เกิดข้อผิดพลาด: ' + error.message);
+        } finally {
+            setProcessingSubPaymentId(null);
+        }
+    };
+
+    const handleRejectSubscription = async (payment) => {
+        if (!currentUser) return;
+        const reason = prompt('กรุณาระบุเหตุผลที่ไม่อนุมัติ (ถ้ามี)') || '';
+        if (!confirm(`ยืนยันไม่อนุมัติ Subscription ยอด ${formatPrice(payment.amount)}?`)) return;
+        setProcessingSubPaymentId(payment.id);
+
+        try {
+            const currentDoc = await getDoc(doc(db, 'subscription_payments', payment.id));
+            if (currentDoc.data()?.status !== 'pending') {
+                alert('⚠️ รายการนี้ถูกดำเนินการไปแล้ว');
+                setProcessingSubPaymentId(null);
+                return;
+            }
+
+            await updateDoc(doc(db, 'subscription_payments', payment.id), {
+                status: 'rejected',
+                reviewedAt: serverTimestamp(),
+                reviewedById: currentUser.uid,
+                reviewedByEmail: currentUser.email || '',
+                rejectReason: reason
+            });
+
+            await addDoc(collection(db, 'payment_logs'), {
+                type: 'subscription',
+                requestId: payment.id,
+                userId: payment.userId,
+                userEmail: payment.userEmail || '',
+                amount: payment.amount,
+                status: 'rejected',
+                reviewedById: currentUser.uid,
+                reviewedByEmail: currentUser.email || '',
+                note: reason,
+                createdAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Reject subscription failed:', error);
+            alert('เกิดข้อผิดพลาด: ' + error.message);
+        } finally {
+            setProcessingSubPaymentId(null);
+        }
+    };
+
     // Credit Adjustment Handler
     const handleAdjustCredit = async () => {
         if (!currentUser || !selectedUser) return;
@@ -542,6 +667,7 @@ const Admin = () => {
     const creditSubTabs = [
         { id: 'deposits', label: 'เติมเงิน', icon: ArrowUpRight },
         { id: 'withdrawals', label: 'ถอนเงิน', icon: ArrowDownRight },
+        { id: 'subscriptions', label: 'Subscription', icon: Crown },
         { id: 'manager', label: 'Credit Manager', icon: Users }
     ];
 
@@ -615,7 +741,7 @@ const Admin = () => {
                                 {creditSubTabs.map((sub) => {
                                     const SubIcon = sub.icon;
                                     const isSubActive = creditSubTab === sub.id;
-                                    const subPending = sub.id === 'deposits' ? stats.pendingDeposits : sub.id === 'withdrawals' ? stats.pendingWithdrawals : 0;
+                                    const subPending = sub.id === 'deposits' ? stats.pendingDeposits : sub.id === 'withdrawals' ? stats.pendingWithdrawals : sub.id === 'subscriptions' ? subscriptionPayments.filter(p => p.status === 'pending').length : 0;
                                     return (
                                         <button
                                             key={sub.id}
@@ -1028,6 +1154,144 @@ const Admin = () => {
                                                 </div>
                                                 <p className="text-xl font-black text-red-400">-{req.amount} TOKEN</p>
                                                 <p className="text-xs text-slate-400 mt-1">{req.bankName} • {req.accountNumber}</p>
+                                                <p className="text-xs text-slate-500 mt-1">{req.reviewedAt?.toDate?.().toLocaleString('th-TH')}</p>
+                                                <p className="text-xs text-slate-400 mt-1">โดย: <span className="text-purple-300 font-medium">{formatApprover(req.reviewedByEmail)}</span></p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Subscriptions Tab */}
+                {activeTab === 'credit' && creditSubTab === 'subscriptions' && (
+                    <div className="relative bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 p-6 shadow-2xl overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500" />
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl" />
+                        
+                        <div className="flex items-center gap-4 mb-8 relative">
+                            <div className="relative">
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-400 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                                    <Crown className="text-white" size={32} />
+                                </div>
+                                {subscriptionPayments.filter(r => r.status === 'pending').length > 0 && (
+                                    <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-bold text-black animate-bounce">
+                                        {subscriptionPayments.filter(r => r.status === 'pending').length}
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-400">อนุมัติ Subscription</h2>
+                                <p className="text-slate-400 mt-1">ตรวจสอบสลิปและอนุมัติการสมัครสมาชิก</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                            <div className="xl:col-span-2 space-y-4">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                    รายการรอดำเนินการ ({subscriptionPayments.filter(r => r.status === 'pending').length})
+                                </h3>
+                                {loadingSubPayments ? (
+                                    <div className="text-slate-400 flex items-center gap-2 justify-center py-12"><Loader2 size={24} className="animate-spin" /> กำลังโหลด...</div>
+                                ) : subscriptionPayments.filter(req => req.status === 'pending').length === 0 ? (
+                                    <div className="text-slate-400 bg-black/30 rounded-2xl p-12 text-center border border-white/5">
+                                        <CheckCircle size={48} className="mx-auto mb-3 text-green-500" />
+                                        <p className="font-medium">ไม่มีรายการรอดำเนินการ</p>
+                                    </div>
+                                ) : (
+                                    subscriptionPayments.filter(req => req.status === 'pending').map((req) => (
+                                        <div key={req.id} className="group bg-black/40 border border-white/10 rounded-2xl p-5 hover:bg-black/60 hover:border-purple-500/30 transition-all duration-300 hover:scale-[1.01]">
+                                            <div className="flex flex-col gap-4">
+                                                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
+                                                            req.tier === 'Premium' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-purple-500 to-pink-600'
+                                                        }`}>
+                                                            {req.tier === 'Premium' ? <Star className="text-white" size={24} /> : <Crown className="text-white" size={24} />}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-white font-semibold text-lg">{req.userEmail || 'Unknown User'}</p>
+                                                            <p className="text-2xl font-black text-purple-400 my-1">{formatPrice(req.amount)}</p>
+                                                            <p className="text-xs text-slate-500 flex items-center gap-1">
+                                                                <Clock size={12} /> {req.createdAt?.toDate ? req.createdAt.toDate().toLocaleString('th-TH') : 'รอเวลา'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-gradient-to-br from-purple-800/50 to-pink-900/50 rounded-xl p-4 border border-purple-500/20 shadow-lg">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                                                                req.tier === 'Premium' ? 'bg-amber-500/20 text-amber-300' : 'bg-purple-500/20 text-purple-300'
+                                                            }`}>
+                                                                {req.tier}
+                                                            </span>
+                                                            {req.isProrate && <span className="px-2 py-1 rounded-lg text-xs bg-blue-500/20 text-blue-300">Prorate</span>}
+                                                        </div>
+                                                        <div className="grid grid-cols-3 gap-3 text-center">
+                                                            <div>
+                                                                <p className="text-lg font-bold text-purple-300">{req.limits?.projects || 1}</p>
+                                                                <p className="text-xs text-slate-400">Projects</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-lg font-bold text-blue-300">{req.limits?.modes || 2}</p>
+                                                                <p className="text-xs text-slate-400">Modes</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-lg font-bold text-green-300">{req.limits?.extenders || 2}</p>
+                                                                <p className="text-xs text-slate-400">Extenders</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-white/10">
+                                                    {req.slipUrl && (
+                                                        <a href={req.slipUrl} target="_blank" rel="noopener noreferrer"
+                                                            className="px-4 py-2 rounded-xl bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition-all text-sm flex items-center gap-2 border border-purple-500/30">
+                                                            🧾 ดูสลิป <ExternalLink size={14} />
+                                                        </a>
+                                                    )}
+                                                    <button onClick={() => handleApproveSubscription(req)} disabled={processingSubPaymentId === req.id}
+                                                        className="px-5 py-3 rounded-xl bg-gradient-to-r from-green-600 to-green-500 text-white hover:from-green-500 hover:to-green-400 transition-all text-sm flex items-center gap-2 disabled:opacity-50 font-semibold shadow-lg shadow-green-500/30 hover:scale-105">
+                                                        {processingSubPaymentId === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />} อนุมัติ
+                                                    </button>
+                                                    <button onClick={() => handleRejectSubscription(req)} disabled={processingSubPaymentId === req.id}
+                                                        className="px-5 py-3 rounded-xl bg-red-500/20 text-red-300 hover:bg-red-500 hover:text-white transition-all text-sm flex items-center gap-2 disabled:opacity-50 font-semibold border border-red-500/30 hover:scale-105">
+                                                        <XCircle size={16} /> ปฏิเสธ
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Clock size={18} className="text-purple-400" />
+                                    ประวัติ Subscription
+                                </h3>
+                                <div className="bg-black/40 border border-white/10 rounded-2xl p-4 max-h-[600px] overflow-y-auto custom-scrollbar space-y-3">
+                                    {subscriptionPayments.filter(s => s.status !== 'pending').length === 0 ? (
+                                        <div className="text-slate-500 text-sm text-center py-8">ยังไม่มีประวัติ</div>
+                                    ) : (
+                                        subscriptionPayments.filter(s => s.status !== 'pending').map(req => (
+                                            <div key={req.id} className="group border border-white/10 rounded-xl p-4 bg-black/30 hover:bg-black/50 hover:border-white/20 transition-all duration-300">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-sm font-semibold text-white">{req.userEmail}</p>
+                                                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                                                        req.status === 'approved' ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                                    }`}>
+                                                        {req.status === 'approved' ? '✓ อนุมัติ' : '✗ ปฏิเสธ'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`px-2 py-0.5 rounded text-xs ${
+                                                        req.tier === 'Premium' ? 'bg-amber-500/20 text-amber-300' : 'bg-purple-500/20 text-purple-300'
+                                                    }`}>{req.tier}</span>
+                                                    <span className="text-lg font-bold text-purple-400">{formatPrice(req.amount)}</span>
+                                                </div>
                                                 <p className="text-xs text-slate-500 mt-1">{req.reviewedAt?.toDate?.().toLocaleString('th-TH')}</p>
                                                 <p className="text-xs text-slate-400 mt-1">โดย: <span className="text-purple-300 font-medium">{formatApprover(req.reviewedByEmail)}</span></p>
                                             </div>
